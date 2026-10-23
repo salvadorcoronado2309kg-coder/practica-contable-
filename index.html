@@ -205,6 +205,7 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surf
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script>
 /* ========== CATÁLOGO ========== */
 const CLASSES={A:'1 · Activos',P:'2 · Pasivos',K:'3 · Capital',I:'4 · Ingresos',CO:'5 · Costos',G:'6 · Gastos',L:'7 · Liquidación y resumen'};
@@ -287,14 +288,54 @@ const EX=[
   s:[['6200-01',2500,0],['1000-03',0,2500]]}
 ];
 
-/* ========== ESTADO ========== */
-const KEY='practica-contable-utesa-v1';
-let S=null;
-function seed(){return {empresa:'Comercial El Cibao, SRL',custom:[],invFinal:null,solved:{},seq:6,
-  entries:EX.slice(0,5).map((e,i)=>({id:'e'+(i+1),fecha:e.f,concepto:e.t,ejemplo:true,lineas:e.s.map(([c,d,h])=>({c,d,h}))}))}}
-function load(){try{const r=localStorage.getItem(KEY);if(r){S=JSON.parse(r);return}}catch(e){} S=seed();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
-load();
+/* ========== ESTADO Y SUPABASE ========== */
+const SB_URL='https://aacsufnltpblhqnbhcdi.supabase.co';
+const SB_KEY='sb_publishable_itrYxlusmUwuHEmB0Yvksw_j_jqdSWD';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+let USER=null,EMP=null;
+let S={empresa:'',custom:[],invFinal:null,solved:{},entries:[]};
+const LSKEY='practica-contable-v2';
+function saveLocal(){try{localStorage.setItem(LSKEY+':'+(EMP?EMP.id:'anon'),JSON.stringify({solved:S.solved,invFinal:S.invFinal}))}catch(e){}}
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem(LSKEY+':'+(EMP?EMP.id:'anon'))||'{}');S.solved=d.solved||{};S.invFinal=d.invFinal??null}catch(e){S.solved={};S.invFinal=null}}
+const mapLinea=l=>({c:l.cuenta_codigo,d:+l.debe||0,h:+l.haber||0,rnc:l.rnc_tercero||'',ncf:l.ncf||'',tipo:l.tipo_bien||''});
+async function guardarAsiento(id,fecha,concepto,lineas){
+ const pl=lineas.map(l=>({cuenta:l.c,debe:l.d||0,haber:l.h||0,rnc:l.rnc||'',ncf:l.ncf||'',tipo_bien:l.tipo||''}));
+ const {data,error}=await sb.rpc('guardar_asiento',{p_empresa:EMP.id,p_id:id||null,p_fecha:fecha,p_concepto:concepto,p_lineas:pl});
+ if(error) throw error; return data;
+}
+async function persistAsiento(id,fecha,concepto,lineas){
+ const nid=await guardarAsiento(id,fecha,concepto,lineas);
+ const row={id:nid,fecha,concepto,ejemplo:false,lineas:lineas.map(l=>({c:l.c,d:l.d||0,h:l.h||0,rnc:l.rnc||'',ncf:l.ncf||'',tipo:l.tipo||''}))};
+ const i=S.entries.findIndex(x=>x.id===nid);
+ if(i>=0) S.entries[i]=row; else S.entries.push(row);
+ sortEntries(); return row;
+}
+async function borrarAsiento(id){const {error}=await sb.from('asientos').delete().eq('id',id); if(error) throw error; S.entries=S.entries.filter(x=>x.id!==id)}
+async function borrarTodos(){const {error}=await sb.from('asientos').delete().eq('empresa_id',EMP.id); if(error) throw error; S.entries=[]}
+async function sembrarEjemplos(){
+ for(const e of EX.slice(0,5)){
+  const id=await guardarAsiento(null,e.f,e.t,e.s.map(([c,d,h])=>({c,d,h})));
+  const {error}=await sb.from('asientos').update({ejemplo:true}).eq('id',id); if(error) throw error;
+ }
+}
+async function cargarTodo(){
+ const {data:emps,error:e1}=await sb.from('empresas').select('*').order('created_at').limit(1);
+ if(e1) throw e1;
+ if(!emps.length){
+  const {data,error}=await sb.from('empresas').insert({owner_id:USER.id,nombre:'Mi empresa, SRL'}).select().single();
+  if(error) throw error;
+  EMP=data; await sembrarEjemplos();
+ } else EMP=emps[0];
+ S.empresa=EMP.nombre;
+ const {data:cu,error:e2}=await sb.from('cuentas').select('*').eq('empresa_id',EMP.id);
+ if(e2) throw e2;
+ S.custom=(cu||[]).map(r=>[r.codigo,r.nombre,r.grupo,r.reguladora?1:0]);
+ const {data:as,error:e3}=await sb.from('asientos').select('*,lineas_asiento(*)').eq('empresa_id',EMP.id).order('fecha').order('created_at');
+ if(e3) throw e3;
+ S.entries=(as||[]).map(a=>({id:a.id,fecha:a.fecha,concepto:a.concepto,ejemplo:a.ejemplo,lineas:(a.lineas_asiento||[]).sort((x,y)=>x.orden-y.orden).map(mapLinea)}));
+ loadLocal(); buildAcc();
+}
+function sortEntries(){S.entries.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''))}
 
 let ACC=[],AMAP={},OPTS='';
 function buildAcc(){ACC=RAW.map(r=>mkAcc(r)).concat((S.custom||[]).map(r=>mkAcc(r,1)));ACC.sort((a,b)=>a.code.localeCompare(b.code,'es',{numeric:true}));
@@ -377,7 +418,9 @@ class Editor{
 let TAB='diario',editingId=null,newOpen=false,mayorSel='',repTab='res',exSel=null,exShow=false,confirmDel=null,closingAsk=false,resetAsk=null,catQ='';
 const V=()=>document.getElementById('view');
 
-function render(){document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===TAB?'page':'false'));
+function render(){
+ if(!USER){document.querySelector("nav.tabs").style.display="none";document.getElementById("topChip").textContent="";document.getElementById("empresaTop").textContent="Inicia sesión";vAuth();return}
+ document.querySelector("nav.tabs").style.display="";document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===TAB?'page':'false'));
  document.getElementById('topChip').textContent=S.entries.length+(S.entries.length===1?' asiento':' asientos');
  document.getElementById('empresaTop').textContent=S.empresa;
  ({diario:vDiario,practica:vPractica,mayor:vMayor,reportes:vReportes,catalogo:vCatalogo})[TAB]();}
@@ -396,8 +439,8 @@ function vDiario(){const hasEj=S.entries.some(e=>e.ejemplo);
    ${jrnTable(e)}<p class="concepto">${esc(e.concepto)}</p>
    <div class="row"><span class="spacer"></span>${confirmDel===e.id?`<span style="font-size:.85rem">¿Eliminar este asiento?</span><button class="btn sm danger" data-a="del-yes" data-id="${e.id}">Eliminar</button><button class="btn sm ghost" data-a="del-no">No</button>`:`<button class="btn sm ghost" data-a="edit" data-id="${e.id}">Editar</button><button class="btn sm ghost danger" data-a="del" data-id="${e.id}">Eliminar</button>`}</div></article>`});
  V().innerHTML=h;
- if(newOpen)new Editor(document.getElementById('edNew'),{key:'nw',onCancel:()=>{newOpen=false;render()},onSubmit:(lines,ed)=>{S.entries.push({id:'e'+(S.seq++),fecha:ed.fecha,concepto:ed.concepto.trim(),lineas:lines});sortEntries();save();newOpen=false;render()}});
- if(editingId){const e=S.entries.find(x=>x.id===editingId);if(e)new Editor(document.getElementById('edEdit'),{key:'ee',lines:e.lineas,fecha:e.fecha,concepto:e.concepto,submitLabel:'Guardar cambios',onCancel:()=>{editingId=null;render()},onSubmit:(lines,ed)=>{e.lineas=lines;e.fecha=ed.fecha;e.concepto=ed.concepto.trim();delete e.ejemplo;sortEntries();save();editingId=null;render()}})}
+ if(newOpen)new Editor(document.getElementById('edNew'),{key:'nw',onCancel:()=>{newOpen=false;render()},onSubmit:(lines,ed)=>{persistAsiento(null,ed.fecha,ed.concepto.trim(),lines).then(()=>{newOpen=false;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}});
+ if(editingId){const e=S.entries.find(x=>x.id===editingId);if(e)new Editor(document.getElementById('edEdit'),{key:'ee',lines:e.lineas,fecha:e.fecha,concepto:e.concepto,submitLabel:'Guardar cambios',onCancel:()=>{editingId=null;render()},onSubmit:(lines,ed)=>{persistAsiento(e.id,ed.fecha,ed.concepto.trim(),lines).then(()=>{editingId=null;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}})}
 }
 
 function vPractica(){const done=Object.keys(S.solved).length;
@@ -412,10 +455,10 @@ function vPractica(){const done=Object.keys(S.solved).length;
   const solHTML=()=>`<div class="card" style="background:var(--sunk);border:none;margin-top:4px"><span class="eyebrow">Solución</span>${jrnTable({lineas:ex.s.map(([c,d,h])=>({c,d,h}))})}</div>`;
   if(exShow)document.getElementById('exSol').innerHTML=solHTML();
   new Editor(document.getElementById('edEx'),{key:'px',meta:false,submitLabel:'Comprobar',extraBtns:`<button class="btn ghost sm" data-act="sol">${exShow?'Ocultar solución':'Ver solución'}</button>`,
-   onExtra:(a)=>{if(a==='sol'){exShow=!exShow;render()}else if(a==='post'){S.entries.push({id:'e'+(S.seq++),fecha:ex.f,concepto:ex.t,lineas:ex.s.map(([c,d,h])=>({c,d,h}))});sortEntries();save();exSel=null;TAB='diario';render();window.scrollTo(0,0)}},
+   onExtra:(a)=>{if(a==='sol'){exShow=!exShow;render()}else if(a==='post'){persistAsiento(null,ex.f,ex.t,ex.s.map(([c,d,h])=>({c,d,h}))).then(()=>{exSel=null;TAB='diario';render();window.scrollTo(0,0)}).catch(err=>alert('No se guardó: '+err.message))}},
    onSubmit:(lines,ed)=>{const want={},got={};ex.s.forEach(([c,d,h])=>want[c]=r2((want[c]||0)+d-h));lines.forEach(l=>got[l.c]=r2((got[l.c]||0)+l.d-l.h));
     const extra=Object.keys(got).filter(c=>!(c in want)),missing=Object.keys(want).filter(c=>!(c in got)),wrong=Object.keys(want).filter(c=>c in got&&!zero(got[c]-want[c]));
-    if(!extra.length&&!missing.length&&!wrong.length){S.solved[exSel]=1;save();
+    if(!extra.length&&!missing.length&&!wrong.length){S.solved[exSel]=1;saveLocal();
      ed.msg(`<strong>¡Correcto!</strong> El asiento está bien hecho. <button class="btn sm primary" data-act="post" style="margin-left:6px">Pasar al Diario</button>`,'ok');
      document.querySelector('.ex[data-i="'+exSel+'"]')?.classList.add('done');return}
     const p=[];if(extra.length)p.push('Estas cuentas no van en este asiento: <strong>'+extra.map(c=>esc(accName(c))).join(', ')+'</strong>.');
@@ -538,7 +581,7 @@ function vReportes(){const C=calc();
  if(repTab!=='bal'&&temp)h+=`<div class="card"><h3>Asientos de cierre</h3><p style="margin:0;font-size:.88rem;color:var(--muted)">Al final del período se cierran ingresos, costos y gastos contra 7100 Resumen de Ganancias o Pérdidas, y el resultado pasa a 3202 Ganancias del Período.</p>
   <div class="row">${closingAsk?`<span style="font-size:.88rem">Se agregarán los asientos de cierre al Diario. ¿Continuar?</span><button class="btn sm primary" data-a="close-yes">Sí, cerrar período</button><button class="btn sm ghost" data-a="close-no">Cancelar</button>`:`<button class="btn" data-a="close">Generar asientos de cierre</button>`}</div></div>`;
  V().innerHTML=h;
- const inp=document.getElementById('invFin');if(inp)inp.onchange=()=>{S.invFinal=inp.value.trim()===''?null:pnum(inp.value);save();render()};}
+ const inp=document.getElementById('invFin');if(inp)inp.onchange=()=>{S.invFinal=inp.value.trim()===''?null:pnum(inp.value);saveLocal();render()};}
 
 function vCatalogo(){const q=catQ.trim().toLowerCase();
  let h=`<h2 class="view-title">Catálogo de cuentas</h2><p class="lede">Basado en el catálogo de UTESA y ampliado. D = naturaleza deudora, C = acreedora. Las cuentas “Menos:” son reguladoras (contra-cuentas).</p>
@@ -558,11 +601,12 @@ function vCatalogo(){const q=catQ.trim().toLowerCase();
   <p style="margin:0;font-size:.85rem;color:var(--muted)">Tus asientos se guardan en este navegador. Copia el respaldo de vez en cuando y pégalo aquí para recuperarlos en otro teléfono.</p>
   <textarea id="backup" rows="3" aria-label="Respaldo" placeholder="Pega aquí un respaldo para restaurarlo"></textarea>
   <div class="msg" id="bMsg"></div>
+  <div class="row"><button class="btn sm danger" data-a="logout">Cerrar sesión</button></div>
   <div class="row"><button class="btn sm" data-a="bk-copy">Copiar respaldo</button><button class="btn sm" data-a="bk-load">Restaurar respaldo pegado</button><span class="spacer"></span>
   ${resetAsk==='seed'?`<button class="btn sm danger" data-a="seed-yes">Sí, restaurar</button><button class="btn sm ghost" data-a="seed-no">No</button>`:`<button class="btn sm ghost danger" data-a="seed">Restaurar datos de ejemplo</button>`}</div></div>`;
  V().innerHTML=h;
  const qi=document.getElementById('catQ');qi.oninput=()=>{catQ=qi.value;const pos=qi.selectionStart;vCatalogo();const n=document.getElementById('catQ');n.focus();n.setSelectionRange(pos,pos)};
- const em=document.getElementById('empresa');em.onchange=()=>{S.empresa=em.value.trim()||'Mi Empresa, SRL';save();render()};}
+ const em=document.getElementById('empresa');em.onchange=async()=>{const n=em.value.trim()||'Mi empresa, SRL';const {error}=await sb.from('empresas').update({nombre:n}).eq('id',EMP.id);if(error)return alert('No se guardó: '+error.message);S.empresa=n;render()};}
 
 /* ========== EXPORTAR ========== */
 const REPT={bal:'Balanza de comprobación',res:'Estado de resultados',bg:'Balance general'};
@@ -635,6 +679,46 @@ function exportPDF(){const J=window.jspdf;if(!J||!J.jsPDF){expMsg('No se pudo ca
   expMsg('PDF descargado.','ok');
  }catch(err){expMsg('No se pudo crear el PDF: '+err.message)}}
 
+/* ========== ACCESO ========== */
+let AUTH_MODE='in';
+function vAuth(msg,cls){
+ V().innerHTML=`<h2 class="view-title">${AUTH_MODE==='in'?'Entra a tu cuenta':'Crea tu cuenta'}</h2>
+ <p class="lede">Tus empresas, catálogos y asientos se guardan en tu cuenta. Solo tú puedes verlos.</p>
+ <div class="card"><label class="f" for="aEmail">Correo<input type="email" id="aEmail" autocomplete="email"></label>
+ <label class="f" for="aPass">Contraseña (mínimo 8 caracteres)<input type="password" id="aPass" autocomplete="${AUTH_MODE==='in'?'current-password':'new-password'}"></label>
+ <div class="msg" id="aMsg"></div>
+ <button class="btn primary" id="aGo">${AUTH_MODE==='in'?'Entrar':'Crear cuenta'}</button>
+ <button class="btn ghost" id="aSwitch">${AUTH_MODE==='in'?'¿No tienes cuenta? Crear una':'Ya tengo cuenta'}</button></div>`;
+ if(msg){const m=document.getElementById('aMsg');m.className='msg '+(cls||'bad');m.textContent=msg}
+ document.getElementById('aSwitch').onclick=()=>{AUTH_MODE=AUTH_MODE==='in'?'up':'in';vAuth()};
+ document.getElementById('aGo').onclick=authGo;
+}
+async function authGo(){
+ const email=document.getElementById('aEmail').value.trim(),pass=document.getElementById('aPass').value;
+ const fail=t=>{const m=document.getElementById('aMsg');m.className='msg bad';m.textContent=t};
+ if(!email||pass.length<8) return fail('Escribe el correo y una contraseña de al menos 8 caracteres.');
+ try{
+  if(AUTH_MODE==='in'){
+   const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+   if(error) return fail('Correo o contraseña incorrectos.');
+   USER=data.user;
+  } else {
+   const {data,error}=await sb.auth.signUp({email,password:pass});
+   if(error) return fail(error.message);
+   if(!data.session){vAuth('Te enviamos un correo para confirmar tu cuenta. Confírmala y luego entra aquí.','ok');return}
+   USER=data.user;
+  }
+  await cargarTodo(); render();
+ }catch(err){fail('No se pudo completar: '+err.message)}
+}
+async function arrancar(){
+ try{
+  const {data}=await sb.auth.getSession();
+  if(data.session){USER=data.session.user; await cargarTodo()}
+ }catch(err){USER=null; alert('No se pudo cargar tu cuenta: '+err.message)}
+ render();
+}
+
 /* ========== EVENTOS ========== */
 document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;TAB=b.dataset.tab;confirmDel=null;resetAsk=null;closingAsk=false;render();window.scrollTo(0,0)});
 V().addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,id=b.dataset.id;
@@ -644,31 +728,32 @@ V().addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)retu
   case 'edit':editingId=id;newOpen=false;render();break;
   case 'del':confirmDel=id;render();break;
   case 'del-no':confirmDel=null;render();break;
-  case 'del-yes':S.entries=S.entries.filter(x=>x.id!==id);confirmDel=null;save();render();break;
+  case 'del-yes':borrarAsiento(id).then(()=>{confirmDel=null;render()}).catch(err=>alert('No se borró: '+err.message));break;
   case 'blank':resetAsk='blank';render();break;
   case 'blank-no':case 'seed-no':resetAsk=null;render();break;
-  case 'blank-yes':S.entries=[];S.invFinal=null;resetAsk=null;save();render();break;
+  case 'blank-yes':borrarTodos().then(()=>{S.invFinal=null;resetAsk=null;saveLocal();render()}).catch(err=>alert('No se pudo borrar: '+err.message));break;
   case 'seed':resetAsk='seed';render();break;
-  case 'seed-yes':{const emp=S.empresa,cu=S.custom;S=seed();S.empresa=emp;S.custom=cu;resetAsk=null;save();buildAcc();render();break}
+  case 'seed-yes':borrarTodos().then(()=>sembrarEjemplos()).then(()=>cargarTodo()).then(()=>{resetAsk=null;render()}).catch(err=>alert('No se pudo restaurar: '+err.message));break;
   case 'ex':exSel=+b.dataset.i;exShow=false;render();window.scrollTo({top:0});break;
   case 'ex-close':exSel=null;render();break;
+  case 'logout':sb.auth.signOut().then(()=>{USER=null;EMP=null;S={empresa:'',custom:[],invFinal:null,solved:{},entries:[]};buildAcc();render()});break;
   case 'xlsx':exportXLSX();break;
   case 'pdf':exportPDF();break;
   case 'rep':repTab=b.dataset.v;closingAsk=false;render();break;
   case 'close':closingAsk=true;render();break;
   case 'close-no':closingAsk=false;render();break;
-  case 'close-yes':{const C=calc();S.entries.push(...closingEntries(C));S.invFinal=null;closingAsk=false;sortEntries();save();render();break}
+  case 'close-yes':{const cs=closingEntries(calc());closingAsk=false;(async()=>{for(const x of cs){await persistAsiento(null,x.fecha,x.concepto,x.lineas.map(l=>({c:l.c,d:l.d,h:l.h})))}S.invFinal=null;saveLocal();render()})().catch(err=>alert('No se cerró: '+err.message));break}
   case 'addacc':{const code=document.getElementById('nCode').value.trim(),name=document.getElementById('nName').value.trim(),g=document.getElementById('nGrp').value,ct=document.getElementById('nContra').checked;
    if(!/^[0-9][0-9-]{2,}$/.test(code))return M('nMsg','Escribe un código numérico, por ejemplo 1000-06.');
    if(AMAP[code])return M('nMsg',`El código ${code} ya existe: ${AMAP[code].name}.`);
    if(!name)return M('nMsg','Escribe el nombre de la cuenta.');
-   S.custom.push([code,name,g,ct?1:0]);save();buildAcc();render();break}
+   const cls=GROUPS[g][1],n0=BASE_NAT[cls],nat=ct?(n0==='D'?'C':'D'):n0;sb.from('cuentas').insert({empresa_id:EMP.id,codigo:code,nombre:name,grupo:g,naturaleza:nat,reguladora:!!ct,propia:true}).then(({error})=>{if(error)return M('nMsg','No se guardó: '+error.message);S.custom.push([code,name,g,ct?1:0]);buildAcc();render()});break}
   case 'bk-copy':{const txt=JSON.stringify(S),ta=document.getElementById('backup');
    const ok=()=>M('bMsg','Respaldo copiado. Guárdalo en tus notas o envíatelo por WhatsApp.','ok');
    try{navigator.clipboard.writeText(txt).then(ok,()=>{ta.value=txt;ta.select();M('bMsg','No se pudo copiar automáticamente. El respaldo quedó seleccionado en el cuadro: cópialo a mano.')})}catch(err){ta.value=txt;ta.select();M('bMsg','El respaldo quedó en el cuadro: cópialo a mano.')}break}
-  case 'bk-load':{try{const o=JSON.parse(document.getElementById('backup').value);if(!Array.isArray(o.entries))throw 0;S=Object.assign(seed(),o);save();buildAcc();render();M('bMsg','Respaldo restaurado.','ok')}catch(err){M('bMsg','Ese texto no es un respaldo válido. Pega el texto completo que copiaste.')}break}
+  case 'bk-load':{try{const o=JSON.parse(document.getElementById('backup').value);if(!Array.isArray(o.entries))throw 0;(async()=>{for(const e of o.entries){await persistAsiento(null,e.fecha,e.concepto,e.lineas.map(l=>({c:l.c,d:l.d||0,h:l.h||0})))}render()})().catch(err=>M('bMsg','No se restauró: '+err.message));M('bMsg','Restaurando asientos…','ok')}catch(err){M('bMsg','Ese texto no es un respaldo válido. Pega el texto completo que copiaste.')}break}
  }});
-render();
+arrancar();
 </script>
 
 </body>

@@ -203,6 +203,8 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surf
   </div>
 </nav>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 /* ========== CATÁLOGO ========== */
 const CLASSES={A:'1 · Activos',P:'2 · Pasivos',K:'3 · Capital',I:'4 · Ingresos',CO:'5 · Costos',G:'6 · Gastos',L:'7 · Liquidación y resumen'};
@@ -304,7 +306,7 @@ buildAcc();
 
 /* ========== UTILIDADES ========== */
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-const NF=new Intl.NumberFormat('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+const NF=new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const r2=n=>Math.round((+n||0)*100)/100;
 const fm=n=>NF.format(r2(n));
 const fp=n=>{n=r2(n);return n<0?'('+NF.format(-n)+')':NF.format(n)};
@@ -530,7 +532,8 @@ function vReportes(){const C=calc();
  if(!S.entries.length){V().innerHTML=h+`<div class="card empty"><strong>No hay asientos todavía.</strong><span>Los reportes aparecen cuando registres transacciones.</span></div>`;return}
  if(repTab!=='bal'&&C.periodic&&(C.invIni||C.compras))h+=`<div class="card"><label class="f" for="invFin">Inventario final de mercancías (conteo físico, RD$)<input type="text" inputmode="decimal" id="invFin" value="${S.invFinal==null?'':S.invFinal}" placeholder="${fm(C.invIni)}"></label>
   <span style="font-size:.82rem;color:var(--muted)">Sistema periódico: Costo de ventas = Inventario inicial + Compras netas − Inventario final. Si lo dejas vacío se usa ${fm(C.invIni)}.</span></div>`;
- h+=`<div class="card">${repTab==='bal'?balanza(C):repTab==='res'?estadoResultados(C):balanceGeneral(C)}</div>`;
+ h+=`<div class="row"><button class="btn sm" data-a="xlsx">Descargar Excel (todo)</button><button class="btn sm" data-a="pdf">Descargar PDF de este reporte</button></div><div class="msg" id="expMsg"></div>`;
+ h+=`<div class="card" id="repCard">${repTab==='bal'?balanza(C):repTab==='res'?estadoResultados(C):balanceGeneral(C)}</div>`;
  const temp=ACC.some(a=>['I','CO','G'].includes(a.cls)&&C.has(a.code)&&!zero(dh(C.L,a.code)));
  if(repTab!=='bal'&&temp)h+=`<div class="card"><h3>Asientos de cierre</h3><p style="margin:0;font-size:.88rem;color:var(--muted)">Al final del período se cierran ingresos, costos y gastos contra 7100 Resumen de Ganancias o Pérdidas, y el resultado pasa a 3202 Ganancias del Período.</p>
   <div class="row">${closingAsk?`<span style="font-size:.88rem">Se agregarán los asientos de cierre al Diario. ¿Continuar?</span><button class="btn sm primary" data-a="close-yes">Sí, cerrar período</button><button class="btn sm ghost" data-a="close-no">Cancelar</button>`:`<button class="btn" data-a="close">Generar asientos de cierre</button>`}</div></div>`;
@@ -561,6 +564,77 @@ function vCatalogo(){const q=catQ.trim().toLowerCase();
  const qi=document.getElementById('catQ');qi.oninput=()=>{catQ=qi.value;const pos=qi.selectionStart;vCatalogo();const n=document.getElementById('catQ');n.focus();n.setSelectionRange(pos,pos)};
  const em=document.getElementById('empresa');em.onchange=()=>{S.empresa=em.value.trim()||'Mi Empresa, SRL';save();render()};}
 
+/* ========== EXPORTAR ========== */
+const REPT={bal:'Balanza de comprobación',res:'Estado de resultados',bg:'Balance general'};
+function expMsg(t,cls){const m=document.getElementById('expMsg');if(m){m.className='msg '+(cls||'bad');m.textContent=t}}
+const nn=s=>{s=String(s==null?'':s).trim();if(!s)return null;const neg=s[0]==='(';const v=parseFloat(s.replace(/[(),\s]/g,''));return isNaN(v)?s:(neg?-v:v)};
+function extractRows(root){const out=[];
+ root.querySelectorAll('.stmt-h > *').forEach(e=>out.push({c:[e.textContent.trim()],t:'h'}));
+ if(out.length)out.push({c:[],t:''});
+ root.querySelectorAll('.sl').forEach(r=>{const k=[...r.children].map(x=>x.textContent.trim());const cls=r.className;
+  const t=/\bbig\b/.test(cls)?'big':/\bsub\b/.test(cls)?'sub':/\bsec\b/.test(cls)?'sec':'';
+  out.push({c:[(/\bind\b/.test(cls)?'    ':'')+(k[0]||''),nn(k[1]),nn(k[2])],t})});
+ root.querySelectorAll('table.grid').forEach(tb=>{
+  out.push({c:[...tb.querySelectorAll('thead th')].map(x=>x.textContent.trim()),t:'th'});
+  tb.querySelectorAll('tbody tr').forEach(tr=>out.push({c:[...tr.children].map((x,i)=>i<2?x.textContent.trim():nn(x.textContent)),t:''}));
+  tb.querySelectorAll('tfoot tr').forEach(tr=>out.push({c:[...tr.children].map((x,i)=>i<2?x.textContent.trim():nn(x.textContent)),t:'big'}));
+ });
+ return out}
+function reportRows(kind){const C=calc();const d=document.createElement('div');
+ d.innerHTML={bal:()=>balanza(C),res:()=>estadoResultados(C),bg:()=>balanceGeneral(C)}[kind]();
+ return extractRows(d)}
+function exportXLSX(){if(!window.XLSX){expMsg('No se pudo cargar la librería de Excel. Revisa tu conexión y vuelve a intentar.');return}
+ if(!S.entries.length){expMsg('No hay asientos para exportar.');return}
+ try{const wb=XLSX.utils.book_new();
+  const dia=[['Fecha','Asiento','Concepto','Código','Cuenta','Debe','Haber']];
+  S.entries.forEach((e,i)=>e.lineas.forEach(l=>dia.push([e.fecha,i+1,e.concepto,l.c,accName(l.c),l.d||null,l.h||null])));
+  const L=ledger();const may=[['Código','Cuenta','Asiento','Debe','Haber','Saldo']];
+  Object.keys(L).sort((a,b)=>a.localeCompare(b,'es',{numeric:true})).forEach(c=>{let run=0;
+   L[c].mov.forEach(m=>{run=r2(run+m.d-m.h);may.push([c,accName(c),m.n,m.d||null,m.h||null,run])});
+   may.push([c,'Totales',null,L[c].d,L[c].h,r2(L[c].d-L[c].h)]);may.push([])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dia),'Diario');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(may),'Mayor');
+  [['Balanza','bal'],['Resultados','res'],['Balance','bg']].forEach(([n,k])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(reportRows(k).map(r=>r.c)),n));
+  XLSX.writeFile(wb,`Contabilidad - ${S.empresa}.xlsx`.replace(/[\\/:*?"<>|]+/g,''));
+  expMsg('Excel descargado con 5 hojas: Diario, Mayor, Balanza, Resultados y Balance.','ok');
+ }catch(err){expMsg('No se pudo crear el Excel: '+err.message)}}
+function exportPDF(){const J=window.jspdf;if(!J||!J.jsPDF){expMsg('No se pudo cargar la librería de PDF. Revisa tu conexión y vuelve a intentar.');return}
+ if(!S.entries.length){expMsg('No hay asientos para exportar.');return}
+ try{const rows=reportRows(repTab);const land=repTab==='bal';
+  const doc=new J.jsPDF({orientation:land?'l':'p',unit:'mm',format:'a4'});
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=15,LH=5;
+  const ncol=Math.max(1,...rows.map(r=>r.c.length));
+  const cols=ncol>=6
+   ?[{w:22,a:'L'},{w:W-2*M-22-120,a:'L'},{w:30,a:'R'},{w:30,a:'R'},{w:30,a:'R'},{w:30,a:'R'}]
+   :[{w:W-2*M-70,a:'L'},{w:35,a:'R'},{w:35,a:'R'}];
+  let x=M;cols.forEach(c=>{c.x=x;x+=c.w});
+  let y=M;
+  rows.forEach((r,ri)=>{
+   if(!r.c.length){y+=3;return}
+   if(r.t==='h'){const first=ri===0;doc.setFont('helvetica',first?'bold':'normal');doc.setFontSize(first?13:9);doc.setTextColor(20,20,20);
+    if(y+8>H-M){doc.addPage();y=M}
+    doc.text(String(r.c[0]),W/2,y+4,{align:'center'});y+=first?7:5;return}
+   const bold=['sec','sub','big','th'].includes(r.t);
+   doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(r.t==='th'?8:9);
+   const col=r.t==='sec'?[13,107,90]:[20,20,20];doc.setTextColor(...col);
+   const ind=/^ /.test(String(r.c[0]))?5:0;
+   const txt=cols.map((c,i)=>{const v=i===0?String(r.c[0]).trim():r.c[i];
+    const s=v==null?'':typeof v==='number'?fp(v):String(v);
+    return c.a==='L'?doc.splitTextToSize(s,c.w-1-(i===0?ind:0)):[s]});
+   const n=Math.max(1,...txt.map(t=>t.length));
+   if(y+n*LH+2>H-M){doc.addPage();y=M}
+   const top=y;
+   if(r.t==='sub'||r.t==='big'){doc.setDrawColor(20,20,20);doc.setLineWidth(0.2);doc.line(cols[1].x,top+0.8,W-M,top+0.8)}
+   txt.forEach((t,i)=>{const c=cols[i];t.forEach((ln,j)=>{const yy=top+4+j*LH;
+    if(c.a==='R')doc.text(ln,c.x+c.w-1,yy,{align:'right'});else doc.text(ln,c.x+(i===0?ind:0),yy)})});
+   y+=n*LH+1;
+   if(r.t==='th'){doc.setDrawColor(20,20,20);doc.setLineWidth(0.4);doc.line(M,y-0.5,W-M,y-0.5);y+=1}
+   if(r.t==='big'){doc.setDrawColor(20,20,20);doc.setLineWidth(0.5);doc.line(cols[1].x,y-0.2,W-M,y-0.2)}
+  });
+  doc.save(`${REPT[repTab]} - ${S.empresa}.pdf`.replace(/[\\/:*?"<>|]+/g,''));
+  expMsg('PDF descargado.','ok');
+ }catch(err){expMsg('No se pudo crear el PDF: '+err.message)}}
+
 /* ========== EVENTOS ========== */
 document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;TAB=b.dataset.tab;confirmDel=null;resetAsk=null;closingAsk=false;render();window.scrollTo(0,0)});
 V().addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,id=b.dataset.id;
@@ -578,6 +652,8 @@ V().addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)retu
   case 'seed-yes':{const emp=S.empresa,cu=S.custom;S=seed();S.empresa=emp;S.custom=cu;resetAsk=null;save();buildAcc();render();break}
   case 'ex':exSel=+b.dataset.i;exShow=false;render();window.scrollTo({top:0});break;
   case 'ex-close':exSel=null;render();break;
+  case 'xlsx':exportXLSX();break;
+  case 'pdf':exportPDF();break;
   case 'rep':repTab=b.dataset.v;closingAsk=false;render();break;
   case 'close':closingAsk=true;render();break;
   case 'close-no':closingAsk=false;render();break;

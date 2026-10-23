@@ -6,6 +6,7 @@ App web para practicar asientos contables con el catálogo de cuentas de UTESA (
 - **Práctica:** 15 transacciones guiadas con corrección automática.
 - **Mayor:** cuentas T con saldos.
 - **Estados:** balanza de comprobación, estado de resultados, balance general y asientos de cierre.
+- **Exportar:** Excel (diario, mayor, balanza, resultados y balance) y PDF del reporte que estés viendo.
 - **Catálogo:** más de 120 cuentas, con búsqueda y cuentas propias.
 
 Los datos se guardan en el navegador de cada dispositivo. Usa "Copiar respaldo" para llevarlos a otro.

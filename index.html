@@ -90,6 +90,9 @@ textarea{resize:vertical;min-height:60px}
 .msg:empty{display:none}
 .msg.bad{background:var(--bad-soft);color:var(--bad)} .msg.ok{background:var(--ok-soft);color:var(--ok)}
 
+.ed-fis{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;border-top:1px dashed var(--line);padding-top:8px}
+.ed-fis .f{font-size:.72rem}.ed-fis input,.ed-fis select{background:var(--surface);font-size:14px;min-height:38px}
+@media (max-width:480px){.ed-fis{grid-template-columns:1fr}}
 /* Libro diario */
 .jrn-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .jrn-n{font-family:var(--f-display);font-weight:800;font-size:1.05rem}
@@ -362,11 +365,12 @@ function ledger(){const L={};S.entries.forEach((e,i)=>{e.lineas.forEach(l=>{cons
 const dh=(L,c)=>L[c]?r2(L[c].d-L[c].h):0;
 
 /* ========== EDITOR DE ASIENTOS ========== */
+const TIPOS=[['01','Gastos de personal'],['02','Trabajos, suministros y servicios'],['03','Arrendamientos'],['04','Gastos de activos fijos'],['05','Gastos de representación'],['06','Otras deducciones admitidas'],['07','Gastos financieros'],['08','Gastos extraordinarios'],['09','Compras que forman parte del costo de venta'],['10','Adquisiciones de activos'],['11','Gastos de seguros']];
 class Editor{
  constructor(root,o){this.root=root;this.o=o;this.k=o.key;
-  this.lines=(o.lines&&o.lines.length?o.lines:[{c:''},{c:''}]).map(l=>({c:l.c||'',d:+l.d?String(l.d):'',h:+l.h?String(l.h):''}));
+  this.lines=(o.lines&&o.lines.length?o.lines:[{c:''},{c:''}]).map(l=>({c:l.c||'',d:+l.d?String(l.d):'',h:+l.h?String(l.h):'',rnc:l.rnc||'',ncf:l.ncf||'',tipo:l.tipo||''}));
   this.fecha=o.fecha||today();this.concepto=o.concepto||'';this.render();this.bind();}
- render(){const k=this.k;
+ render(){const k=this.k,F=!!this.o.fiscal;
   this.root.innerHTML=`${this.o.meta===false?'':`<div class="ed-meta">
    <label class="f" for="${k}-fecha">Fecha<input type="date" id="${k}-fecha" value="${esc(this.fecha)}"></label>
    <label class="f" for="${k}-conc">Concepto<input type="text" id="${k}-conc" placeholder="Ej.: Para registrar la compra de…" value="${esc(this.concepto)}"></label></div>`}
@@ -376,6 +380,11 @@ class Editor{
      <label class="f lab-d" for="${k}-d${i}">Debe<input type="text" inputmode="decimal" id="${k}-d${i}" data-f="d" value="${esc(l.d)}" placeholder="0.00"></label>
      <label class="f lab-h" for="${k}-h${i}">Haber<input type="text" inputmode="decimal" id="${k}-h${i}" data-f="h" value="${esc(l.h)}" placeholder="0.00"></label>
      <button class="x" data-act="del" aria-label="Quitar línea ${i+1}" ${this.lines.length<=2?'disabled':''}>×</button>
+     ${F?`<div class="ed-fis">
+      <label class="f">RNC o cédula del tercero<input type="text" inputmode="numeric" data-f="rnc" value="${esc(l.rnc)}" placeholder="Opcional"></label>
+      <label class="f">NCF de la factura<input type="text" data-f="ncf" value="${esc(l.ncf)}" placeholder="B0100000001"></label>
+      <label class="f">Tipo de bien o servicio<select data-f="tipo"><option value="">Sin especificar</option>${TIPOS.map(([v,t])=>`<option value="${v}"${l.tipo===v?' selected':''}>${v} · ${t}</option>`).join('')}</select></label>
+     </div>`:''}
     </div>`).join('')}</div>
    <div class="row"><button class="btn sm ghost" data-act="add">+ Agregar línea</button></div>
    <div class="totals" id="${k}-tot"></div>
@@ -383,7 +392,8 @@ class Editor{
    <div class="row">${this.o.extraBtns||''}<span class="spacer"></span>${this.o.onCancel?`<button class="btn ghost" data-act="cancel">Cancelar</button>`:''}<button class="btn primary" data-act="ok">${this.o.submitLabel||'Registrar asiento'}</button></div>`;
   this.lines.forEach((l,i)=>{const s=this.root.querySelector(`#${k}-c${i}`);s.value=l.c});
   this.totals();}
- sync(){const k=this.k;const f=this.root.querySelector(`#${k}-fecha`),c=this.root.querySelector(`#${k}-conc`);if(f)this.fecha=f.value;if(c)this.concepto=c.value;}
+ sync(){const k=this.k;const f=this.root.querySelector(`#${k}-fecha`),c=this.root.querySelector(`#${k}-conc`);if(f)this.fecha=f.value;if(c)this.concepto=c.value;
+  this.root.querySelectorAll('.ed-line').forEach(box=>{const L=this.lines[+box.dataset.i];if(!L)return;box.querySelectorAll('[data-f]').forEach(el=>{L[el.dataset.f]=el.value})})}
  totals(){const d=r2(this.lines.reduce((s,l)=>s+pnum(l.d),0)),h=r2(this.lines.reduce((s,l)=>s+pnum(l.h),0)),df=r2(d-h);
   this.root.querySelector(`#${this.k}-tot`).innerHTML=`<div><span class="eyebrow" style="color:var(--debe)">Total debe</span><b>${fm(d)}</b></div>
    <div><span class="eyebrow" style="color:var(--haber)">Total haber</span><b>${fm(h)}</b></div>
@@ -394,17 +404,21 @@ class Editor{
    if(f==='d'||f==='h'){this.lines[i][f]=t.value;const o=f==='d'?'h':'d';if(t.value.trim()&&this.lines[i][o]){this.lines[i][o]='';box.querySelector(`[data-f="${o}"]`).value=''}this.totals();}});
   this.root.addEventListener('change',ev=>{const t=ev.target,box=t.closest('.ed-line');if(box&&t.dataset.f==='c')this.lines[+box.dataset.i].c=t.value});
   this.root.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b||!this.root.contains(b))return;const a=b.dataset.act;
-   if(a==='add'){this.sync();this.lines.push({c:'',d:'',h:''});this.render();this.root.querySelector(`#${this.k}-c${this.lines.length-1}`).focus()}
+   if(a==='add'){this.sync();this.lines.push({c:'',d:'',h:'',rnc:'',ncf:'',tipo:''});this.render();this.root.querySelector(`#${this.k}-c${this.lines.length-1}`).focus()}
    else if(a==='del'){this.sync();this.lines.splice(+b.closest('.ed-line').dataset.i,1);this.render()}
    else if(a==='cancel'){this.o.onCancel()}
    else if(a==='ok'){this.submit()}
    else if(this.o.onExtra){this.sync();this.o.onExtra(a,this)}});}
- collect(){this.sync();const out=[];for(const [i,l] of this.lines.entries()){const d=pnum(l.d),h=pnum(l.h);
-   if(!l.c&&!d&&!h)continue;
+ collect(){this.sync();const out=[];
+  for(const [i,l] of this.lines.entries()){const d=pnum(l.d),h=pnum(l.h);
+   const rnc=(l.rnc||'').trim(),ncf=(l.ncf||'').trim().toUpperCase();
+   if(!l.c&&!d&&!h&&!rnc&&!ncf)continue;
    if(!l.c)return {err:`La línea ${i+1} tiene monto pero no tiene cuenta.`};
    if(!d&&!h)return {err:`La línea ${i+1} (${esc(accName(l.c))}) no tiene monto en Debe ni en Haber.`};
    if(d<0||h<0)return {err:'Los montos no pueden ser negativos.'};
-   out.push({c:l.c,d,h});}
+   if(rnc&&!/^(\d{9}|\d{11})$/.test(rnc))return {err:`El RNC de la línea ${i+1} debe tener 9 dígitos (empresa) u 11 (persona).`};
+   if(ncf&&!/^[BE]\d{10,12}$/.test(ncf))return {err:`El NCF de la línea ${i+1} no es válido. Ejemplo: B0100000001.`};
+   out.push({c:l.c,d,h,rnc,ncf,tipo:l.tipo||''});}
   if(out.length<2)return {err:'Un asiento necesita al menos dos cuentas: una al Debe y otra al Haber (partida doble).'};
   if(!out.some(l=>l.d)||!out.some(l=>l.h))return {err:'Debe haber al menos una cuenta al Debe y una al Haber.'};
   const td=r2(out.reduce((s,l)=>s+l.d,0)),th=r2(out.reduce((s,l)=>s+l.h,0));
@@ -439,8 +453,8 @@ function vDiario(){const hasEj=S.entries.some(e=>e.ejemplo);
    ${jrnTable(e)}<p class="concepto">${esc(e.concepto)}</p>
    <div class="row"><span class="spacer"></span>${confirmDel===e.id?`<span style="font-size:.85rem">¿Eliminar este asiento?</span><button class="btn sm danger" data-a="del-yes" data-id="${e.id}">Eliminar</button><button class="btn sm ghost" data-a="del-no">No</button>`:`<button class="btn sm ghost" data-a="edit" data-id="${e.id}">Editar</button><button class="btn sm ghost danger" data-a="del" data-id="${e.id}">Eliminar</button>`}</div></article>`});
  V().innerHTML=h;
- if(newOpen)new Editor(document.getElementById('edNew'),{key:'nw',onCancel:()=>{newOpen=false;render()},onSubmit:(lines,ed)=>{persistAsiento(null,ed.fecha,ed.concepto.trim(),lines).then(()=>{newOpen=false;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}});
- if(editingId){const e=S.entries.find(x=>x.id===editingId);if(e)new Editor(document.getElementById('edEdit'),{key:'ee',lines:e.lineas,fecha:e.fecha,concepto:e.concepto,submitLabel:'Guardar cambios',onCancel:()=>{editingId=null;render()},onSubmit:(lines,ed)=>{persistAsiento(e.id,ed.fecha,ed.concepto.trim(),lines).then(()=>{editingId=null;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}})}
+ if(newOpen)new Editor(document.getElementById('edNew'),{key:'nw',fiscal:true,onCancel:()=>{newOpen=false;render()},onSubmit:(lines,ed)=>{persistAsiento(null,ed.fecha,ed.concepto.trim(),lines).then(()=>{newOpen=false;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}});
+ if(editingId){const e=S.entries.find(x=>x.id===editingId);if(e)new Editor(document.getElementById('edEdit'),{key:'ee',fiscal:true,lines:e.lineas,fecha:e.fecha,concepto:e.concepto,submitLabel:'Guardar cambios',onCancel:()=>{editingId=null;render()},onSubmit:(lines,ed)=>{persistAsiento(e.id,ed.fecha,ed.concepto.trim(),lines).then(()=>{editingId=null;render()}).catch(err=>ed.msg('No se guardó: '+err.message))}})}
 }
 
 function vPractica(){const done=Object.keys(S.solved).length;
@@ -609,6 +623,24 @@ function vCatalogo(){const q=catQ.trim().toLowerCase();
  const em=document.getElementById('empresa');em.onchange=async()=>{const n=em.value.trim()||'Mi empresa, SRL';const {error}=await sb.from('empresas').update({nombre:n}).eq('id',EMP.id);if(error)return alert('No se guardó: '+error.message);S.empresa=n;render()};}
 
 /* ========== EXPORTAR ========== */
+function libroFiscal(){
+ const H=['RNC/Cédula','Tipo ID','Tipo bien/servicio','NCF','Fecha comprobante (AAAAMMDD)','Concepto','Monto sin ITBIS','ITBIS','Cuenta'];
+ const compras=[H],ventas=[H];
+ const tid=r=>r?(r.length===9?1:2):'';
+ S.entries.forEach(e=>{
+  const itC=r2(e.lineas.filter(l=>l.c==='1008').reduce((s,l)=>s+l.d,0));
+  const itV=r2(e.lineas.filter(l=>l.c==='2004').reduce((s,l)=>s+l.h,0));
+  const f=e.fecha.replace(/-/g,'');
+  let usedC=false,usedV=false;
+  e.lineas.forEach(l=>{
+   if(!l.ncf&&!l.rnc) return;
+   if(l.d>0&&/^(5|6|12)/.test(l.c)){compras.push([l.rnc||'',tid(l.rnc),l.tipo||'',l.ncf||'',f,e.concepto,l.d,usedC?0:itC,l.c]);usedC=true}
+   else if(l.h>0&&/^4/.test(l.c)){ventas.push([l.rnc||'',tid(l.rnc),l.tipo||'',l.ncf||'',f,e.concepto,l.h,usedV?0:itV,l.c]);usedV=true}
+  });
+ });
+ return {compras,ventas};
+}
+
 const REPT={bal:'Balanza de comprobación',res:'Estado de resultados',bg:'Balance general'};
 function expMsg(t,cls){const m=document.getElementById('expMsg');if(m){m.className='msg '+(cls||'bad');m.textContent=t}}
 const nn=s=>{s=String(s==null?'':s).trim();if(!s)return null;const neg=s[0]==='(';const v=parseFloat(s.replace(/[(),\s]/g,''));return isNaN(v)?s:(neg?-v:v)};
@@ -638,6 +670,7 @@ function exportXLSX(){if(!window.XLSX){expMsg('No se pudo cargar la librería de
    may.push([c,'Totales',null,L[c].d,L[c].h,r2(L[c].d-L[c].h)]);may.push([])});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dia),'Diario');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(may),'Mayor');
+  const lf=libroFiscal();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(lf.compras),'Compras 606');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(lf.ventas),'Ventas 607');
   [['Balanza','bal'],['Resultados','res'],['Balance','bg']].forEach(([n,k])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(reportRows(k).map(r=>r.c)),n));
   XLSX.writeFile(wb,`Contabilidad - ${S.empresa}.xlsx`.replace(/[\\/:*?"<>|]+/g,''));
   expMsg('Excel descargado con 5 hojas: Diario, Mayor, Balanza, Resultados y Balance.','ok');

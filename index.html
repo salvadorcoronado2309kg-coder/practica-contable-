@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d6b5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Contabilidad">
+<meta name="description" content="Practica asientos contables con el catálogo UTESA: diario, mayor, balanza y estados financieros.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Práctica Contable UTESA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: app de una columna para teléfono — encabezado fijo arriba, navegación inferior, tarjetas tipo libro contable */
+:root{
+  --bg:#eef3f1; --surface:#ffffff; --sunk:#e3ebe8; --ink:#15211e; --muted:#5a6c66; --line:#d3dfdb;
+  --accent:#0d6b5a; --accent-ink:#ffffff; --accent-soft:#d8eee7;
+  --debe:#1d5ea6; --haber:#a3461c; --ok:#1d7a3e; --ok-soft:#ddf2e3; --bad:#b3261e; --bad-soft:#fbe3e0; --warn:#8a5d00;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-num:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0d1412; --surface:#151f1c; --sunk:#1b2723; --ink:#e3ece9; --muted:#93a8a1; --line:#2a3a35;
+  --accent:#4fc2a6; --accent-ink:#06201a; --accent-soft:#173a32;
+  --debe:#86b4f2; --haber:#f1a47f; --ok:#63cf8a; --ok-soft:#173826; --bad:#ff8f84; --bad-soft:#3d1c19; --warn:#e7b84a;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0d1412; --surface:#151f1c; --sunk:#1b2723; --ink:#e3ece9; --muted:#93a8a1; --line:#2a3a35;
+  --accent:#4fc2a6; --accent-ink:#06201a; --accent-soft:#173a32;
+  --debe:#86b4f2; --haber:#f1a47f; --ok:#63cf8a; --ok-soft:#173826; --bad:#ff8f84; --bad-soft:#3d1c19; --warn:#e7b84a;
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--accent);color:var(--accent-ink);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 12px}
+.top-in{max-width:760px;margin:0 auto;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.brand{font-family:var(--f-display);font-weight:800;font-size:1.25rem;letter-spacing:-.01em;margin:0}
+.brand small{display:block;font-family:var(--f-body);font-weight:500;font-size:.75rem;opacity:.85;letter-spacing:.02em}
+.top-chip{font-size:.75rem;font-weight:600;padding:4px 9px;border-radius:99px;background:color-mix(in srgb,var(--accent-ink) 18%,transparent);white-space:nowrap}
+
+main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 110px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h2.view-title{font-family:var(--f-display);font-weight:800;font-size:1.6rem;letter-spacing:-.015em;margin:4px 0 0;text-wrap:balance}
+.lede{color:var(--muted);margin:0;max-width:62ch}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.05rem;margin:0}
+.eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer;min-height:40px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn.sm{min-height:32px;padding:5px 10px;font-size:.85rem}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.78rem;font-weight:600;color:var(--muted);min-width:0}
+input[type=text],input[type=date],input[type=search],select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;min-height:42px;font-size:16px}
+textarea{resize:vertical;min-height:60px}
+
+/* Editor de asientos */
+.ed-meta{display:grid;grid-template-columns:150px 1fr;gap:10px}
+@media (max-width:480px){.ed-meta{grid-template-columns:1fr}}
+.ed-line{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;padding:10px;border-radius:8px;background:var(--sunk)}
+.ed-line select{grid-column:1/-1;background:var(--surface)}
+.ed-line input{background:var(--surface);text-align:right;font-family:var(--f-num)}
+.ed-line .lab-d{color:var(--debe)} .ed-line .lab-h{color:var(--haber)}
+.x{border:none;background:transparent;color:var(--muted);font-size:1.3rem;width:40px;cursor:pointer;align-self:end;min-height:42px;border-radius:8px}
+.x:hover{color:var(--bad);background:var(--bad-soft)}
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:2px solid var(--ink);padding-top:8px}
+.totals div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.totals b{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:.95rem;overflow-wrap:anywhere}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:.75rem;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.mute{background:var(--sunk);color:var(--muted)}
+.msg{font-size:.88rem;border-radius:8px;padding:9px 11px}
+.msg:empty{display:none}
+.msg.bad{background:var(--bad-soft);color:var(--bad)} .msg.ok{background:var(--ok-soft);color:var(--ok)}
+
+/* Libro diario */
+.jrn-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.jrn-n{font-family:var(--f-display);font-weight:800;font-size:1.05rem}
+.jrn-date{font-family:var(--f-num);font-size:.82rem;color:var(--muted)}
+.jrn-t{width:100%;border-collapse:collapse;font-size:.88rem}
+.jrn-t th{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right;font-weight:700;padding:4px 0;border-bottom:1px solid var(--line)}
+.jrn-t th:first-child{text-align:left}
+.jrn-t td{padding:5px 0;vertical-align:top;border-bottom:1px dashed var(--line)}
+.jrn-t td.amt{text-align:right;white-space:nowrap;padding-left:8px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.jrn-t td.d{color:var(--debe)} .jrn-t td.h{color:var(--haber)}
+.jrn-t tr.cr td:first-child{padding-left:22px}
+.code{font-family:var(--f-num);font-size:.78rem;color:var(--muted);margin-right:6px}
+.concepto{font-size:.88rem;color:var(--muted);font-style:italic;margin:0}
+.tag-ej{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid currentColor;border-radius:4px;padding:1px 5px}
+
+/* Mayor: cuentas T */
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+@media (max-width:420px){.tgrid{grid-template-columns:1fr}}
+.tacc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 12px 10px;min-width:0}
+.tacc h4{margin:0 0 8px;font-size:.92rem;font-weight:700;text-align:center;text-wrap:balance}
+.tbody{display:grid;grid-template-columns:1fr 1fr;border-top:2px solid var(--ink)}
+.tside{padding:6px 8px;min-width:0}
+.tside+.tside{border-left:2px solid var(--ink)}
+.tside .lbl{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:center;margin-bottom:4px}
+.tside.d .lbl{color:var(--debe)} .tside.h .lbl{color:var(--haber)}
+.tmov{display:flex;justify-content:space-between;gap:6px;font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:.8rem;padding:1px 0}
+.tmov span:first-child{color:var(--muted)}
+.ttot{border-top:1px solid var(--line);margin-top:4px;padding-top:3px;font-weight:600}
+.tsaldo{margin-top:6px;text-align:center;font-size:.82rem;font-weight:600}
+.tsaldo .num{font-weight:600}
+
+/* Tablas */
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px}
+table.grid{width:100%;border-collapse:collapse;font-size:.84rem;min-width:620px}
+table.grid th{font-size:.66rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 6px;border-bottom:2px solid var(--ink);font-weight:700}
+table.grid th:nth-child(-n+2){text-align:left}
+table.grid td{padding:6px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.grid td:nth-child(2){text-align:left;font-family:var(--f-body);white-space:normal}
+table.grid td:first-child{text-align:left;color:var(--muted)}
+table.grid tfoot td{font-weight:700;border-top:2px solid var(--ink);border-bottom:3px double var(--ink)}
+
+/* Estados financieros */
+.stmt{display:flex;flex-direction:column}
+.stmt-h{text-align:center;display:flex;flex-direction:column;gap:2px;padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.stmt-h strong{font-family:var(--f-display);font-size:1.1rem}
+.stmt-h span{font-size:.82rem;color:var(--muted)}
+.sl{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:4px 0;font-size:.88rem;align-items:baseline}
+.sl .a1,.sl .a2{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right;min-width:92px;white-space:nowrap}
+.sl.sec{font-weight:700;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding-top:12px}
+.sl.ind span:first-child{padding-left:14px}
+.sl.sub{font-weight:700}
+.sl.sub .a2{border-top:1px solid var(--ink)}
+.sl.big{font-weight:800;font-size:.95rem;padding-top:8px}
+.sl.big .a2{border-top:1px solid var(--ink);border-bottom:3px double var(--ink)}
+@media (max-width:400px){.sl{font-size:.8rem;gap:6px}.sl .a1,.sl .a2{min-width:78px}}
+
+.seg{display:flex;background:var(--sunk);border-radius:9px;padding:3px;gap:3px}
+.seg button{flex:1;border:none;background:transparent;border-radius:7px;padding:8px 6px;font-weight:600;font-size:.86rem;cursor:pointer;color:var(--muted);min-height:38px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* Catálogo */
+.cat-cls{font-family:var(--f-display);font-weight:800;font-size:1rem;margin:6px 0 0;color:var(--accent)}
+.cat-grp{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.cat-item{display:grid;grid-template-columns:76px 1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem;align-items:baseline}
+.cat-item .num{color:var(--muted);font-size:.8rem}
+.nat{font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:4px}
+.nat.D{color:var(--debe);background:color-mix(in srgb,var(--debe) 12%,transparent)}
+.nat.C{color:var(--haber);background:color-mix(in srgb,var(--haber) 12%,transparent)}
+
+/* Práctica */
+.ex{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;text-align:left;width:100%}
+.ex:last-child{border-bottom:none}
+.ex-n{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.82rem;background:var(--sunk);color:var(--muted);font-family:var(--f-num)}
+.ex.done .ex-n{background:var(--ok);color:var(--surface)}
+.ex p{margin:0;font-size:.9rem}
+.ex-active{border:2px solid var(--accent)}
+.task{font-size:1rem;margin:0;line-height:1.5}
+
+.empty{text-align:center;color:var(--muted);padding:24px 10px;display:flex;flex-direction:column;gap:10px;align-items:center}
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:color-mix(in srgb,var(--warn) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line));border-radius:var(--r);padding:10px 12px;font-size:.88rem}
+
+/* Navegación inferior */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
+  padding-left:max(6px,env(safe-area-inset-left,0px));padding-right:max(6px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs-in{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+.tab{border:none;background:none;padding:8px 2px 9px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.7rem;font-weight:600;color:var(--muted);cursor:pointer}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-current="page"]{color:var(--accent)}
+@media (prefers-reduced-motion:no-preference){.card,.tacc{animation:rise .18s ease-out}@keyframes rise{from{transform:translateY(4px)}to{transform:none}}}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="top-in">
+    <h1 class="brand">Práctica Contable<small id="empresaTop">Comercial El Cibao, SRL</small></h1>
+    <span class="top-chip" id="topChip">0 asientos</span>
+  </div>
+</header>
+
+<main><div class="wrap" id="view"></div></main>
+
+<nav class="tabs" aria-label="Secciones">
+  <div class="tabs-in">
+    <button class="tab" data-tab="diario"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></svg>Diario</button>
+    <button class="tab" data-tab="practica"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>Práctica</button>
+    <button class="tab" data-tab="mayor"><svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M12 6v14"/><path d="M6 10h4M14 10h4M6 14h3M14 14h4"/></svg>Mayor</button>
+    <button class="tab" data-tab="reportes"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Estados</button>
+    <button class="tab" data-tab="catalogo"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>Catálogo</button>
+  </div>
+</nav>
+
+<script>
+/* ========== CATÁLOGO ========== */
+const CLASSES={A:'1 · Activos',P:'2 · Pasivos',K:'3 · Capital',I:'4 · Ingresos',CO:'5 · Costos',G:'6 · Gastos',L:'7 · Liquidación y resumen'};
+const GROUPS={
+ AC:['10 · Activos corrientes','A'],INV:['11 · Inversiones','A'],PPE:['12 · Propiedad, planta y equipo','A'],DIF:['13 · Diferidos','A'],OA:['14 · Otros activos','A'],
+ PC:['20 · Pasivos corrientes','P'],PLP:['21 · Pasivos a largo plazo','P'],PD:['22 · Pasivos diferidos','P'],
+ K:['30 · Capital contable','K'],
+ ING:['40 · Ingresos operacionales','I'],OI:['41 · Otros ingresos','I'],
+ COS:['50 · Costos','CO'],
+ GV:['60 · Gastos de ventas','G'],GA:['61 · Gastos generales y administrativos','G'],GF:['62 · Gastos financieros','G'],OG:['63 · Otros gastos','G'],ISR:['64 · Impuesto sobre la renta','G'],
+ L:['71 · Cuentas de liquidación','L']};
+const BASE_NAT={A:'D',P:'C',K:'C',I:'C',CO:'D',G:'D',L:'C'};
+const RAW=[
+['1000-01','Caja General','AC'],['1000-02','Banco del Exterior Dominicano','AC'],['1000-03','Banco Popular Dominicano','AC'],['1000-04','Banco de Reservas','AC'],['1000-05','Banco BHD','AC'],
+['1001','Caja Chica','AC'],
+['1002-01','Cuentas por Cobrar – Clientes','AC'],['1002-02','Cuentas por Cobrar – Funcionarios y Empleados','AC'],['1002-03','Cheques Devueltos','AC'],['1002-04','Documentos por Cobrar','AC'],
+['1003','Provisión para Cuentas Dudosas','AC',1],['1004','Inventario de Mercancías','AC'],['1005','Mercancías en Tránsito','AC'],['1006','Anticipo al Impuesto sobre la Renta','AC'],
+['1007-01','Seguros Pagados por Adelantado','AC'],['1007-02','Placas Pagadas por Adelantado','AC'],['1007-03','Patentes Pagadas por Adelantado','AC'],['1007-04','Sueldos Pagados por Adelantado','AC'],['1007-05','Alquileres Pagados por Adelantado','AC'],
+['1008','ITBIS Pagado (Crédito Fiscal)','AC'],['1009','Papelería y Útiles de Oficina','AC'],
+['1100','Acciones de Otras Compañías','INV'],['1101','Bonos y Títulos Valores','INV'],['1102','Certificados de Depósito a Plazo','INV'],
+['1200','Terrenos','PPE'],['1201','Edificios','PPE'],['1202','Depreciación Acumulada – Edificios','PPE',1],['1203','Muebles y Equipos de Oficina','PPE'],['1204','Depreciación Acumulada – Muebles y Equipos','PPE',1],
+['1205','Equipos de Transporte','PPE'],['1206','Depreciación Acumulada – Equipos de Transporte','PPE',1],['1207','Maquinarias y Equipos','PPE'],['1208','Depreciación Acumulada – Maquinarias','PPE',1],
+['1209','Equipos de Cómputo','PPE'],['1210','Depreciación Acumulada – Equipos de Cómputo','PPE',1],
+['1300','Gastos de Organización','DIF'],['1301','Amortización Acumulada – Gastos de Organización','DIF',1],['1302','Mejoras en Propiedad Arrendada','DIF'],
+['1401','Fianzas','OA'],['1402','Depósitos','OA'],['1403','Marcas y Patentes','OA'],
+['2000','Sobregiros Bancarios','PC'],['2001','Cuentas por Pagar – Proveedores','PC'],['2002','Documentos por Pagar','PC'],['2003','Porción Corriente de Préstamos','PC'],['2004','ITBIS por Pagar','PC'],
+['2005','Impuesto sobre la Renta por Pagar','PC'],['2006','Dividendos por Pagar','PC'],
+['2007-01','Retenciones – Seguridad Social (TSS)','PC'],['2007-02','Retenciones – ISR Asalariados','PC'],['2007-03','Sueldos por Pagar','PC'],['2007-04','Intereses Acumulados por Pagar','PC'],
+['2007-05','Regalía Pascual Acumulada','PC'],['2007-06','Prestaciones Laborales Acumuladas','PC'],['2007-07','Aportes Patronales TSS por Pagar','PC'],['2008','Anticipos de Clientes','PC'],
+['2100','Préstamos Bancarios a Largo Plazo','PLP'],['2101','Documentos por Pagar a Largo Plazo','PLP'],['2102','Hipotecas por Pagar','PLP'],
+['2200','Ingresos Cobrados por Adelantado','PD'],['2201','Alquileres Cobrados por Adelantado','PD'],
+['3000','Capital Autorizado (Capital Social)','K'],['3001','Aportes para Futuras Capitalizaciones','K'],['3002','Retiros del Propietario','K',1],['3100','Reserva Legal','K'],
+['3200','Ganancias Acumuladas','K'],['3201','Pérdidas Acumuladas','K',1],['3202','Ganancias del Período','K'],
+['4000','Ventas de Contado','ING'],['4001','Ventas a Crédito','ING'],['4002','Devoluciones y Rebajas en Ventas','ING',1],['4003','Descuentos en Ventas','ING',1],
+['4100','Intereses Ganados','OI'],['4101','Ingresos por Alquiler','OI'],['4102','Comisiones Ganadas','OI'],['4103','Ganancia en Venta de Activos','OI'],['4104','Otros Ingresos','OI'],
+['5000','Compras de Mercancías','COS'],['5001','Fletes en Compras','COS'],['5002','Devoluciones y Rebajas en Compras','COS',1],['5003','Descuentos en Compras','COS',1],['5100','Costo de Ventas','COS'],
+['6000-01','Sueldos de Vendedores','GV'],['6000-02','Comisiones sobre Ventas','GV'],['6000-03','Publicidad y Propaganda','GV'],['6000-04','Fletes en Ventas','GV'],['6000-05','Cuentas Incobrables','GV'],['6000-06','Combustible y Lubricantes','GV'],['6000-07','Empaques y Envolturas','GV'],
+['6100-01','Sueldos','GA'],['6100-02','Horas Extras','GA'],['6100-03','Regalía Pascual','GA'],['6100-04','Seguro Social (TSS Patronal)','GA'],['6100-05','INFOTEP','GA'],['6100-06','Alquiler','GA'],
+['6100-07','Depreciación','GA'],['6100-08','Materiales de Oficina','GA'],['6100-09','Seguros','GA'],['6100-10','Reparaciones y Mantenimiento','GA'],['6100-11','Agua','GA'],['6100-12','Amortización','GA'],
+['6100-13','Teléfono','GA'],['6100-14','Energía Eléctrica','GA'],['6100-15','Internet','GA'],['6100-16','Limpieza','GA'],['6100-17','Honorarios Profesionales','GA'],['6100-18','Impuestos y Patentes','GA'],
+['6100-19','Gastos de Viaje','GA'],['6100-20','Gastos Varios','GA'],
+['6200-01','Intereses sobre Préstamos','GF'],['6200-02','Comisiones y Cargos Bancarios','GF'],['6200-03','Pérdida Cambiaria','GF'],
+['6300-01','Pérdida en Venta de Activos','OG'],['6300-02','Multas y Recargos','OG'],
+['6400','Gasto de Impuesto sobre la Renta','ISR'],
+['7100','Resumen de Ganancias o Pérdidas','L']
+];
+function mkAcc(r,custom){const cls=GROUPS[r[2]][1];const nat=r[3]?(BASE_NAT[cls]==='D'?'C':'D'):BASE_NAT[cls];return {code:r[0],name:r[1],g:r[2],cls,nat,contra:!!r[3],custom:!!custom}}
+
+/* ========== EJERCICIOS ========== */
+const EX=[
+ {f:'2026-10-01',t:'Se constituye la empresa. Los socios aportan RD$500,000 en efectivo, depositados en el Banco Popular, y mercancías valoradas en RD$150,000.',
+  s:[['1000-03',500000,0],['1004',150000,0],['3000',0,650000]]},
+ {f:'2026-10-02',t:'Se compran muebles y equipos de oficina por RD$60,000, pagados con cheque del Banco Popular.',
+  s:[['1203',60000,0],['1000-03',0,60000]]},
+ {f:'2026-10-03',t:'Se compran mercancías a crédito por RD$80,000 más 18% de ITBIS.',
+  s:[['5000',80000,0],['1008',14400,0],['2001',0,94400]]},
+ {f:'2026-10-05',t:'Se venden mercancías al contado por RD$45,000 más 18% de ITBIS. El dinero entra a Caja General.',
+  s:[['1000-01',53100,0],['4000',0,45000],['2004',0,8100]]},
+ {f:'2026-10-06',t:'Se venden mercancías a crédito a un cliente por RD$70,000 más 18% de ITBIS.',
+  s:[['1002-01',82600,0],['4001',0,70000],['2004',0,12600]]},
+ {f:'2026-10-07',t:'Se paga con cheque del Banco Popular una póliza de seguro por un año: RD$24,000.',
+  s:[['1007-01',24000,0],['1000-03',0,24000]]},
+ {f:'2026-10-08',t:'Se crea un fondo de Caja Chica por RD$10,000 con cheque del Banco Popular.',
+  s:[['1001',10000,0],['1000-03',0,10000]]},
+ {f:'2026-10-12',t:'Un cliente abona RD$40,000 a su cuenta. Se deposita en el Banco Popular.',
+  s:[['1000-03',40000,0],['1002-01',0,40000]]},
+ {f:'2026-10-14',t:'Se pagan RD$50,000 a proveedores con cheque del Banco Popular.',
+  s:[['2001',50000,0],['1000-03',0,50000]]},
+ {f:'2026-10-15',t:'El Banco Popular concede un préstamo a 3 años por RD$200,000, acreditado a la cuenta corriente.',
+  s:[['1000-03',200000,0],['2100',0,200000]]},
+ {f:'2026-10-20',t:'Se pagan con cheque del Banco Popular: energía eléctrica RD$4,500 y teléfono RD$3,200.',
+  s:[['6100-14',4500,0],['6100-13',3200,0],['1000-03',0,7700]]},
+ {f:'2026-10-30',t:'Se paga la nómina del mes: sueldos RD$60,000. Se retiene a los empleados 5.91% de TSS (AFP 2.87% + SFS 3.04%). El neto se paga con cheque del Banco Popular.',
+  s:[['6100-01',60000,0],['2007-01',0,3546],['1000-03',0,56454]]},
+ {f:'2026-10-31',t:'Ajuste: se reconoce como gasto un mes del seguro pagado por adelantado (RD$24,000 ÷ 12).',
+  s:[['6100-09',2000,0],['1007-01',0,2000]]},
+ {f:'2026-10-31',t:'Ajuste: depreciación mensual de los muebles (RD$60,000, vida útil 5 años, línea recta, sin valor residual).',
+  s:[['6100-07',1000,0],['1204',0,1000]]},
+ {f:'2026-10-31',t:'Se pagan RD$2,500 de intereses del préstamo con cheque del Banco Popular.',
+  s:[['6200-01',2500,0],['1000-03',0,2500]]}
+];
+
+/* ========== ESTADO ========== */
+const KEY='practica-contable-utesa-v1';
+let S=null;
+function seed(){return {empresa:'Comercial El Cibao, SRL',custom:[],invFinal:null,solved:{},seq:6,
+  entries:EX.slice(0,5).map((e,i)=>({id:'e'+(i+1),fecha:e.f,concepto:e.t,ejemplo:true,lineas:e.s.map(([c,d,h])=>({c,d,h}))}))}}
+function load(){try{const r=localStorage.getItem(KEY);if(r){S=JSON.parse(r);return}}catch(e){} S=seed();}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+load();
+
+let ACC=[],AMAP={},OPTS='';
+function buildAcc(){ACC=RAW.map(r=>mkAcc(r)).concat((S.custom||[]).map(r=>mkAcc(r,1)));ACC.sort((a,b)=>a.code.localeCompare(b.code,'es',{numeric:true}));
+  AMAP={};ACC.forEach(a=>AMAP[a.code]=a);
+  let h='<option value="">Elige una cuenta…</option>';
+  for(const g in GROUPS){const list=ACC.filter(a=>a.g===g);if(!list.length)continue;h+=`<optgroup label="${GROUPS[g][0]}">`+list.map(a=>`<option value="${a.code}">${a.code} · ${esc(a.name)}</option>`).join('')+'</optgroup>'}
+  OPTS=h;}
+buildAcc();
+
+/* ========== UTILIDADES ========== */
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+const NF=new Intl.NumberFormat('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2=n=>Math.round((+n||0)*100)/100;
+const fm=n=>NF.format(r2(n));
+const fp=n=>{n=r2(n);return n<0?'('+NF.format(-n)+')':NF.format(n)};
+const zero=n=>Math.abs(n)<0.005;
+const pnum=v=>{v=String(v||'').replace(/[,\s]/g,'').replace(/^RD\$/i,'');const n=parseFloat(v);return isFinite(n)?r2(n):0};
+const fdate=s=>s?s.split('-').reverse().join('/'):'';
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+const accName=c=>AMAP[c]?AMAP[c].name:'(cuenta no encontrada)';
+function sortEntries(){S.entries.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''))}
+
+function ledger(){const L={};S.entries.forEach((e,i)=>{e.lineas.forEach(l=>{const x=L[l.c]??={d:0,h:0,mov:[]};x.d=r2(x.d+(+l.d||0));x.h=r2(x.h+(+l.h||0));x.mov.push({n:i+1,d:+l.d||0,h:+l.h||0})})});return L}
+const dh=(L,c)=>L[c]?r2(L[c].d-L[c].h):0;
+
+/* ========== EDITOR DE ASIENTOS ========== */
+class Editor{
+ constructor(root,o){this.root=root;this.o=o;this.k=o.key;
+  this.lines=(o.lines&&o.lines.length?o.lines:[{c:''},{c:''}]).map(l=>({c:l.c||'',d:+l.d?String(l.d):'',h:+l.h?String(l.h):''}));
+  this.fecha=o.fecha||today();this.concepto=o.concepto||'';this.render();this.bind();}
+ render(){const k=this.k;
+  this.root.innerHTML=`${this.o.meta===false?'':`<div class="ed-meta">
+   <label class="f" for="${k}-fecha">Fecha<input type="date" id="${k}-fecha" value="${esc(this.fecha)}"></label>
+   <label class="f" for="${k}-conc">Concepto<input type="text" id="${k}-conc" placeholder="Ej.: Para registrar la compra de…" value="${esc(this.concepto)}"></label></div>`}
+   <div class="row" style="gap:6px;flex-direction:column;align-items:stretch">${this.lines.map((l,i)=>`
+    <div class="ed-line" data-i="${i}">
+     <select id="${k}-c${i}" aria-label="Cuenta de la línea ${i+1}" data-f="c">${OPTS}</select>
+     <label class="f lab-d" for="${k}-d${i}">Debe<input type="text" inputmode="decimal" id="${k}-d${i}" data-f="d" value="${esc(l.d)}" placeholder="0.00"></label>
+     <label class="f lab-h" for="${k}-h${i}">Haber<input type="text" inputmode="decimal" id="${k}-h${i}" data-f="h" value="${esc(l.h)}" placeholder="0.00"></label>
+     <button class="x" data-act="del" aria-label="Quitar línea ${i+1}" ${this.lines.length<=2?'disabled':''}>×</button>
+    </div>`).join('')}</div>
+   <div class="row"><button class="btn sm ghost" data-act="add">+ Agregar línea</button></div>
+   <div class="totals" id="${k}-tot"></div>
+   <div class="msg" id="${k}-msg"></div>
+   <div class="row">${this.o.extraBtns||''}<span class="spacer"></span>${this.o.onCancel?`<button class="btn ghost" data-act="cancel">Cancelar</button>`:''}<button class="btn primary" data-act="ok">${this.o.submitLabel||'Registrar asiento'}</button></div>`;
+  this.lines.forEach((l,i)=>{const s=this.root.querySelector(`#${k}-c${i}`);s.value=l.c});
+  this.totals();}
+ sync(){const k=this.k;const f=this.root.querySelector(`#${k}-fecha`),c=this.root.querySelector(`#${k}-conc`);if(f)this.fecha=f.value;if(c)this.concepto=c.value;}
+ totals(){const d=r2(this.lines.reduce((s,l)=>s+pnum(l.d),0)),h=r2(this.lines.reduce((s,l)=>s+pnum(l.h),0)),df=r2(d-h);
+  this.root.querySelector(`#${this.k}-tot`).innerHTML=`<div><span class="eyebrow" style="color:var(--debe)">Total debe</span><b>${fm(d)}</b></div>
+   <div><span class="eyebrow" style="color:var(--haber)">Total haber</span><b>${fm(h)}</b></div>
+   <div><span class="eyebrow">Diferencia</span>${zero(df)&&d>0?'<span class="pill ok">Cuadra ✓</span>':`<b style="color:${zero(df)?'var(--muted)':'var(--bad)'}">${fm(Math.abs(df))}</b>`}</div>`;}
+ msg(t,cls){const m=this.root.querySelector(`#${this.k}-msg`);m.className='msg '+(cls||'bad');m.innerHTML=t}
+ bind(){
+  this.root.addEventListener('input',ev=>{const t=ev.target,box=t.closest('.ed-line');if(!box)return;const i=+box.dataset.i,f=t.dataset.f;
+   if(f==='d'||f==='h'){this.lines[i][f]=t.value;const o=f==='d'?'h':'d';if(t.value.trim()&&this.lines[i][o]){this.lines[i][o]='';box.querySelector(`[data-f="${o}"]`).value=''}this.totals();}});
+  this.root.addEventListener('change',ev=>{const t=ev.target,box=t.closest('.ed-line');if(box&&t.dataset.f==='c')this.lines[+box.dataset.i].c=t.value});
+  this.root.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b||!this.root.contains(b))return;const a=b.dataset.act;
+   if(a==='add'){this.sync();this.lines.push({c:'',d:'',h:''});this.render();this.root.querySelector(`#${this.k}-c${this.lines.length-1}`).focus()}
+   else if(a==='del'){this.sync();this.lines.splice(+b.closest('.ed-line').dataset.i,1);this.render()}
+   else if(a==='cancel'){this.o.onCancel()}
+   else if(a==='ok'){this.submit()}
+   else if(this.o.onExtra){this.sync();this.o.onExtra(a,this)}});}
+ collect(){this.sync();const out=[];for(const [i,l] of this.lines.entries()){const d=pnum(l.d),h=pnum(l.h);
+   if(!l.c&&!d&&!h)continue;
+   if(!l.c)return {err:`La línea ${i+1} tiene monto pero no tiene cuenta.`};
+   if(!d&&!h)return {err:`La línea ${i+1} (${esc(accName(l.c))}) no tiene monto en Debe ni en Haber.`};
+   if(d<0||h<0)return {err:'Los montos no pueden ser negativos.'};
+   out.push({c:l.c,d,h});}
+  if(out.length<2)return {err:'Un asiento necesita al menos dos cuentas: una al Debe y otra al Haber (partida doble).'};
+  if(!out.some(l=>l.d)||!out.some(l=>l.h))return {err:'Debe haber al menos una cuenta al Debe y una al Haber.'};
+  const td=r2(out.reduce((s,l)=>s+l.d,0)),th=r2(out.reduce((s,l)=>s+l.h,0));
+  if(!zero(td-th))return {err:`El asiento no cuadra: Debe ${fm(td)} ≠ Haber ${fm(th)}. Diferencia de RD$${fm(Math.abs(td-th))}.`};
+  if(this.o.meta!==false&&!this.concepto.trim())return {err:'Escribe el concepto o explicación del asiento.'};
+  return {lines:out};}
+ submit(){const r=this.collect();if(r.err){this.msg(r.err);return}this.o.onSubmit(r.lines,this);}
+}
+
+/* ========== VISTAS ========== */
+let TAB='diario',editingId=null,newOpen=false,mayorSel='',repTab='res',exSel=null,exShow=false,confirmDel=null,closingAsk=false,resetAsk=null,catQ='';
+const V=()=>document.getElementById('view');
+
+function render(){document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===TAB?'page':'false'));
+ document.getElementById('topChip').textContent=S.entries.length+(S.entries.length===1?' asiento':' asientos');
+ document.getElementById('empresaTop').textContent=S.empresa;
+ ({diario:vDiario,practica:vPractica,mayor:vMayor,reportes:vReportes,catalogo:vCatalogo})[TAB]();}
+
+function jrnTable(e){const ls=[...e.lineas].sort((a,b)=>(b.d>0)-(a.d>0));
+ return `<table class="jrn-t"><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${ls.map(l=>`<tr class="${l.h>0?'cr':''}"><td><span class="code">${l.c}</span>${esc(accName(l.c))}</td><td class="amt d">${l.d?fm(l.d):''}</td><td class="amt h">${l.h?fm(l.h):''}</td></tr>`).join('')}</tbody></table>`}
+
+function vDiario(){const hasEj=S.entries.some(e=>e.ejemplo);
+ let h=`<h2 class="view-title">Libro Diario</h2><p class="lede">Registra cada transacción con partida doble. El asiento solo se guarda cuando el Debe y el Haber cuadran.</p>`;
+ if(hasEj)h+=`<div class="banner"><span>Los asientos marcados <span class="tag-ej">Ejemplo</span> vienen precargados para que veas el mayor y los estados con datos.</span><span class="spacer"></span>${resetAsk==='blank'?`<span>¿Borrar todos los asientos?</span><button class="btn sm danger" data-a="blank-yes">Sí, borrar</button><button class="btn sm ghost" data-a="blank-no">No</button>`:`<button class="btn sm" data-a="blank">Empezar en blanco</button>`}</div>`;
+ h+=newOpen?`<div class="card ex-active"><h3>Nuevo asiento #${S.entries.length+1}</h3><div id="edNew"></div></div>`:`<button class="btn primary" data-a="new" style="min-height:48px">+ Nuevo asiento</button>`;
+ if(!S.entries.length)h+=`<div class="card empty"><strong>Todavía no hay asientos.</strong><span>Toca “Nuevo asiento” o ve a Práctica para resolver transacciones guiadas.</span></div>`;
+ S.entries.forEach((e,i)=>{
+  if(editingId===e.id){h+=`<div class="card ex-active"><h3>Editar asiento #${i+1}</h3><div id="edEdit"></div></div>`;return}
+  h+=`<article class="card"><div class="jrn-head"><span class="jrn-n">Asiento #${i+1} ${e.ejemplo?'<span class="tag-ej">Ejemplo</span>':''}</span><span class="jrn-date">${fdate(e.fecha)}</span></div>
+   ${jrnTable(e)}<p class="concepto">${esc(e.concepto)}</p>
+   <div class="row"><span class="spacer"></span>${confirmDel===e.id?`<span style="font-size:.85rem">¿Eliminar este asiento?</span><button class="btn sm danger" data-a="del-yes" data-id="${e.id}">Eliminar</button><button class="btn sm ghost" data-a="del-no">No</button>`:`<button class="btn sm ghost" data-a="edit" data-id="${e.id}">Editar</button><button class="btn sm ghost danger" data-a="del" data-id="${e.id}">Eliminar</button>`}</div></article>`});
+ V().innerHTML=h;
+ if(newOpen)new Editor(document.getElementById('edNew'),{key:'nw',onCancel:()=>{newOpen=false;render()},onSubmit:(lines,ed)=>{S.entries.push({id:'e'+(S.seq++),fecha:ed.fecha,concepto:ed.concepto.trim(),lineas:lines});sortEntries();save();newOpen=false;render()}});
+ if(editingId){const e=S.entries.find(x=>x.id===editingId);if(e)new Editor(document.getElementById('edEdit'),{key:'ee',lines:e.lineas,fecha:e.fecha,concepto:e.concepto,submitLabel:'Guardar cambios',onCancel:()=>{editingId=null;render()},onSubmit:(lines,ed)=>{e.lineas=lines;e.fecha=ed.fecha;e.concepto=ed.concepto.trim();delete e.ejemplo;sortEntries();save();editingId=null;render()}})}
+}
+
+function vPractica(){const done=Object.keys(S.solved).length;
+ let h=`<h2 class="view-title">Práctica guiada</h2><p class="lede">Un mes de operaciones de una empresa comercial. Lee la transacción, haz el asiento y la app te dice si está bien. Si aciertas, lo puedes pasar al Diario.</p>
+  <div class="row"><span class="pill ${done===EX.length?'ok':'mute'}">${done} de ${EX.length} resueltos</span><span class="pill mute">ITBIS 18% · TSS empleado 5.91%</span></div>`;
+ if(exSel!==null){const ex=EX[exSel];
+  h+=`<div class="card ex-active"><div class="row"><span class="eyebrow">Transacción ${exSel+1} · ${fdate(ex.f)}</span><span class="spacer"></span><button class="btn sm ghost" data-a="ex-close">Cerrar</button></div>
+   <p class="task">${esc(ex.t)}</p><div id="edEx"></div><div id="exSol"></div></div>`;}
+ h+=`<div class="card"><h3>Transacciones</h3><div>${EX.map((e,i)=>`<button class="ex ${S.solved[i]?'done':''}" data-a="ex" data-i="${i}"><span class="ex-n">${S.solved[i]?'✓':i+1}</span><p>${esc(e.t)}</p></button>`).join('')}</div></div>`;
+ V().innerHTML=h;
+ if(exSel!==null){const ex=EX[exSel];
+  const solHTML=()=>`<div class="card" style="background:var(--sunk);border:none;margin-top:4px"><span class="eyebrow">Solución</span>${jrnTable({lineas:ex.s.map(([c,d,h])=>({c,d,h}))})}</div>`;
+  if(exShow)document.getElementById('exSol').innerHTML=solHTML();
+  new Editor(document.getElementById('edEx'),{key:'px',meta:false,submitLabel:'Comprobar',extraBtns:`<button class="btn ghost sm" data-act="sol">${exShow?'Ocultar solución':'Ver solución'}</button>`,
+   onExtra:(a)=>{if(a==='sol'){exShow=!exShow;render()}else if(a==='post'){S.entries.push({id:'e'+(S.seq++),fecha:ex.f,concepto:ex.t,lineas:ex.s.map(([c,d,h])=>({c,d,h}))});sortEntries();save();exSel=null;TAB='diario';render();window.scrollTo(0,0)}},
+   onSubmit:(lines,ed)=>{const want={},got={};ex.s.forEach(([c,d,h])=>want[c]=r2((want[c]||0)+d-h));lines.forEach(l=>got[l.c]=r2((got[l.c]||0)+l.d-l.h));
+    const extra=Object.keys(got).filter(c=>!(c in want)),missing=Object.keys(want).filter(c=>!(c in got)),wrong=Object.keys(want).filter(c=>c in got&&!zero(got[c]-want[c]));
+    if(!extra.length&&!missing.length&&!wrong.length){S.solved[exSel]=1;save();
+     ed.msg(`<strong>¡Correcto!</strong> El asiento está bien hecho. <button class="btn sm primary" data-act="post" style="margin-left:6px">Pasar al Diario</button>`,'ok');
+     document.querySelector('.ex[data-i="'+exSel+'"]')?.classList.add('done');return}
+    const p=[];if(extra.length)p.push('Estas cuentas no van en este asiento: <strong>'+extra.map(c=>esc(accName(c))).join(', ')+'</strong>.');
+    if(missing.length)p.push(`Te falta${missing.length>1?'n':''} ${missing.length} cuenta${missing.length>1?'s':''}.`);
+    if(wrong.length)p.push('Revisa el monto o el lado (Debe/Haber) de: <strong>'+wrong.map(c=>esc(accName(c))).join(', ')+'</strong>.');
+    ed.msg('Todavía no. '+p.join(' '));}});}
+}
+
+function tAccount(c,x){const a=AMAP[c]||{name:'(desconocida)',nat:'D'};const s=r2(x.d-x.h);
+ const dm=x.mov.filter(m=>m.d),hm=x.mov.filter(m=>m.h);
+ const side=(arr,k)=>arr.map(m=>`<div class="tmov"><span>#${m.n}</span><span>${fm(m[k])}</span></div>`).join('')||'<div class="tmov"><span>—</span><span></span></div>';
+ const sTxt=zero(s)?'<span class="pill mute">Saldada</span>':`Saldo ${s>0?'deudor':'acreedor'}: <span class="num" style="color:${s>0?'var(--debe)':'var(--haber)'}">RD$ ${fm(Math.abs(s))}</span>${(s>0?'D':'C')!==a.nat?' <span class="pill bad" title="Saldo contrario a su naturaleza">Revisar</span>':''}`;
+ return `<div class="tacc"><h4><span class="code">${c}</span>${esc(a.name)}</h4><div class="tbody">
+  <div class="tside d"><div class="lbl">Debe</div>${side(dm,'d')}<div class="tmov ttot"><span>Σ</span><span>${fm(x.d)}</span></div></div>
+  <div class="tside h"><div class="lbl">Haber</div>${side(hm,'h')}<div class="tmov ttot"><span>Σ</span><span>${fm(x.h)}</span></div></div></div>
+  <div class="tsaldo">${sTxt}</div></div>`}
+
+function vMayor(){const L=ledger();const codes=Object.keys(L).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+ let h=`<h2 class="view-title">Libro Mayor</h2><p class="lede">Cada cuenta en forma de T. El número a la izquierda (#) es el asiento del Diario de donde viene el movimiento.</p>`;
+ if(!codes.length){V().innerHTML=h+`<div class="card empty"><strong>Sin movimientos.</strong><span>Registra asientos en el Diario para ver las cuentas T.</span></div>`;return}
+ h+=`<label class="f" for="mayorSel">Mostrar<select id="mayorSel"><option value="">Todas las cuentas con movimiento (${codes.length})</option>${codes.map(c=>`<option value="${c}">${c} · ${esc(accName(c))}</option>`).join('')}</select></label>`;
+ const list=mayorSel&&L[mayorSel]?[mayorSel]:codes;
+ h+=`<div class="tgrid">${list.map(c=>tAccount(c,L[c])).join('')}</div>`;
+ V().innerHTML=h;const sel=document.getElementById('mayorSel');sel.value=L[mayorSel]?mayorSel:'';sel.onchange=()=>{mayorSel=sel.value;render()};}
+
+/* ----- Cálculos de estados ----- */
+function calc(){const L=ledger();const has=c=>L[c]&&(L[c].d||L[c].h);
+ const inG=g=>ACC.filter(a=>a.g===g&&has(a.code));
+ const periodic=!has('5100');const invIni=dh(L,'1004');
+ const compras=['5000','5001','5002','5003'].reduce((s,c)=>s+dh(L,c),0);
+ const invFin=periodic?(S.invFinal==null?invIni:S.invFinal):invIni;
+ const ventas=inG('ING').reduce((s,a)=>s-dh(L,a.code),0);
+ const costo=periodic?r2(invIni+compras-invFin):dh(L,'5100');
+ const sumG=g=>inG(g).reduce((s,a)=>s+dh(L,a.code),0);
+ const gv=sumG('GV'),ga=sumG('GA'),gf=sumG('GF'),og=sumG('OG'),isr=sumG('ISR'),oi=-sumG('OI');
+ const ub=r2(ventas-costo),uo=r2(ub-gv-ga),uai=r2(uo+oi-gf-og),un=r2(uai-isr);
+ return {L,has,inG,periodic,invIni,compras,invFin,ventas,costo,gv,ga,gf,og,isr,oi,ub,uo,uai,un}}
+
+const sl=(lab,a1,a2,cls)=>`<div class="sl ${cls||''}"><span>${lab}</span><span class="a1">${a1==null?'':fp(a1)}</span><span class="a2">${a2==null?'':fp(a2)}</span></div>`;
+function period(){const f=S.entries.map(e=>e.fecha).filter(Boolean).sort();return f.length?{a:f[0],b:f[f.length-1]}:null}
+
+function estadoResultados(C){const p=period();const {L}=C;
+ let h=`<div class="stmt"><div class="stmt-h"><strong>${esc(S.empresa)}</strong><span>Estado de Resultados</span><span>${p?`Del ${fdate(p.a)} al ${fdate(p.b)}`:'Sin período'} · Valores en RD$</span></div>`;
+ h+=sl('Ingresos',null,null,'sec');
+ C.inG('ING').forEach(a=>h+=sl(esc(a.name),-dh(L,a.code),null,'ind'));
+ h+=sl('Ventas netas',null,C.ventas,'sub');
+ h+=sl('Costo de ventas',null,null,'sec');
+ if(C.periodic){h+=sl('Inventario inicial de mercancías',C.invIni,null,'ind');
+  ['5000','5001','5002','5003'].forEach(c=>{if(C.has(c))h+=sl((AMAP[c].contra?'Menos: ':'Más: ')+esc(AMAP[c].name),dh(L,c),null,'ind')});
+  h+=sl('Mercancía disponible para la venta',C.invIni+C.compras,null,'ind');
+  h+=sl('Menos: Inventario final',-C.invFin,null,'ind');}
+ h+=sl('Costo de ventas',null,-C.costo,'sub');
+ h+=sl(C.ub<0?'Pérdida bruta':'Utilidad bruta en ventas',null,C.ub,'sub');
+ h+=sl('Gastos de operación',null,null,'sec');
+ C.inG('GV').forEach(a=>h+=sl(esc(a.name),dh(L,a.code),null,'ind'));if(C.gv)h+=sl('Total gastos de ventas',null,-C.gv,'sub');
+ C.inG('GA').forEach(a=>h+=sl(esc(a.name),dh(L,a.code),null,'ind'));if(C.ga)h+=sl('Total gastos generales y administrativos',null,-C.ga,'sub');
+ h+=sl(C.uo<0?'Pérdida en operaciones':'Utilidad en operaciones',null,C.uo,'sub');
+ if(C.oi||C.gf||C.og){h+=sl('Otros ingresos y gastos',null,null,'sec');
+  C.inG('OI').forEach(a=>h+=sl(esc(a.name),-dh(L,a.code),null,'ind'));
+  C.inG('GF').concat(C.inG('OG')).forEach(a=>h+=sl(esc(a.name),-dh(L,a.code),null,'ind'));
+  h+=sl('Neto otros ingresos (gastos)',null,C.oi-C.gf-C.og,'sub');}
+ h+=sl('Utilidad antes del ISR',null,C.uai,'sub');
+ if(C.isr)h+=sl('Impuesto sobre la renta',null,-C.isr,'ind');
+ h+=sl(C.un<0?'PÉRDIDA NETA DEL PERÍODO':'UTILIDAD NETA DEL PERÍODO',null,C.un,'big');
+ return h+'</div>'}
+
+function balanceGeneral(C){const p=period();const {L}=C;let tA=0,tP=0,tK=0;
+ let h=`<div class="stmt"><div class="stmt-h"><strong>${esc(S.empresa)}</strong><span>Balance General (Estado de Situación Financiera)</span><span>Al ${p?fdate(p.b):'—'} · Valores en RD$</span></div>`;
+ h+=sl('Activos',null,null,'sec');
+ for(const g of ['AC','INV','PPE','DIF','OA']){let list=C.inG(g);if(g==='AC'&&C.periodic&&!list.some(a=>a.code==='1004')&&C.invFin)list=list.concat([AMAP['1004']]).sort((a,b)=>a.code.localeCompare(b.code,'es',{numeric:true}));
+  if(!list.length)continue;let t=0;h+=`<div class="sl"><span style="font-weight:600">${GROUPS[g][0].replace(/^\d+ · /,'')}</span><span class="a1"></span><span class="a2"></span></div>`;
+  list.forEach(a=>{const v=(a.code==='1004'&&C.periodic)?C.invFin:dh(L,a.code);t+=v;h+=sl((a.contra?'Menos: ':'')+esc(a.name)+(a.code==='1004'&&C.periodic?' (final)':''),v,null,'ind')});
+  h+=sl('Total '+GROUPS[g][0].replace(/^\d+ · /,'').toLowerCase(),null,t,'sub');tA+=t;}
+ h+=sl('TOTAL ACTIVOS',null,tA,'big');
+ h+=sl('Pasivos',null,null,'sec');
+ for(const g of ['PC','PLP','PD']){const list=C.inG(g);if(!list.length)continue;let t=0;
+  list.forEach(a=>{const v=-dh(L,a.code);t+=v;h+=sl(esc(a.name),v,null,'ind')});h+=sl('Total '+GROUPS[g][0].replace(/^\d+ · /,'').toLowerCase(),null,t,'sub');tP+=t;}
+ h+=sl('Total pasivos',null,tP,'sub');
+ h+=sl('Capital contable',null,null,'sec');
+ C.inG('K').forEach(a=>{const v=-dh(L,a.code);tK+=v;h+=sl((a.contra?'Menos: ':'')+esc(a.name),v,null,'ind')});
+ if(C.has('7100')&&!zero(dh(L,'7100'))){const v=-dh(L,'7100');tK+=v;h+=sl('Resumen de Ganancias o Pérdidas',v,null,'ind')}
+ if(!zero(C.un)){tK+=C.un;h+=sl(C.un<0?'Pérdida neta del período (sin cerrar)':'Utilidad neta del período (sin cerrar)',C.un,null,'ind')}
+ h+=sl('Total capital',null,tK,'sub');
+ h+=sl('TOTAL PASIVO + CAPITAL',null,tP+tK,'big');
+ const ok=zero(tA-tP-tK);
+ h+=`<div class="row" style="justify-content:center;margin-top:10px">${ok?'<span class="pill ok">Activo = Pasivo + Capital ✓</span>':`<span class="pill bad">Descuadre de RD$ ${fm(Math.abs(tA-tP-tK))}</span>`}</div>`;
+ return h+'</div>'}
+
+function balanza(C){const {L}=C;const codes=Object.keys(L).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));let td=0,th=0,sd=0,sh=0;
+ const rows=codes.map(c=>{const x=L[c],s=r2(x.d-x.h);td+=x.d;th+=x.h;if(s>0)sd+=s;else sh-=s;
+  return `<tr><td>${c}</td><td>${esc(accName(c))}</td><td>${fm(x.d)}</td><td>${fm(x.h)}</td><td>${s>0?fm(s):''}</td><td>${s<0?fm(-s):''}</td></tr>`}).join('');
+ const ok=zero(td-th)&&zero(sd-sh);const p=period();
+ return `<div class="stmt-h"><strong>${esc(S.empresa)}</strong><span>Balanza de Comprobación de Sumas y Saldos</span><span>${p?`Al ${fdate(p.b)}`:''} · Valores en RD$</span></div>
+  <div class="scroll"><table class="grid"><thead><tr><th>Código</th><th>Cuenta</th><th>Débitos</th><th>Créditos</th><th>Saldo deudor</th><th>Saldo acreedor</th></tr></thead>
+  <tbody>${rows}</tbody><tfoot><tr><td></td><td>Totales</td><td>${fm(td)}</td><td>${fm(th)}</td><td>${fm(sd)}</td><td>${fm(sh)}</td></tr></tfoot></table></div>
+  <div class="row" style="justify-content:center">${ok?'<span class="pill ok">La balanza cuadra ✓</span>':'<span class="pill bad">La balanza no cuadra</span>'}</div>`}
+
+function closingEntries(C){const {L}=C;const fecha=(period()||{b:today()}).b;const out=[];
+ const mk=(list,conc,extra)=>{const lines=[];let net=0;list.forEach(a=>{const b=dh(L,a.code);if(zero(b))return;if(b>0)lines.push({c:a.code,d:0,h:b});else lines.push({c:a.code,d:-b,h:0});net+=b});
+  (extra||[]).forEach(l=>{lines.push(l);net+=l.h-l.d});net=r2(net);if(!lines.length)return 0;
+  if(net>0)lines.push({c:'7100',d:net,h:0});else if(net<0)lines.push({c:'7100',d:0,h:-net});
+  out.push({id:'e'+(S.seq++),fecha,concepto:conc,lineas:lines});return net};
+ mk(ACC.filter(a=>a.cls==='I'),'Cierre: para cerrar las cuentas de ingresos contra Resumen de Ganancias o Pérdidas.');
+ const inv=[];if(C.periodic){if(C.invIni>0)inv.push({c:'1004',d:0,h:C.invIni});if(C.invFin>0)inv.push({c:'1004',d:C.invFin,h:0});}
+ mk(ACC.filter(a=>a.cls==='CO'||a.cls==='G'),'Cierre: para cerrar costos y gastos, cancelar el inventario inicial y registrar el inventario final.',inv);
+ const res=r2(C.un+(-dh(L,'7100')));
+ if(!zero(res))out.push({id:'e'+(S.seq++),fecha,concepto:res>0?'Cierre: para trasladar la utilidad del período a Ganancias del Período.':'Cierre: para trasladar la pérdida del período a Ganancias del Período.',
+  lineas:res>0?[{c:'7100',d:res,h:0},{c:'3202',d:0,h:res}]:[{c:'3202',d:-res,h:0},{c:'7100',d:0,h:-res}]});
+ return out}
+
+function vReportes(){const C=calc();
+ let h=`<h2 class="view-title">Balanza y estados</h2><p class="lede">Se calculan solos con los asientos del Diario.</p>
+  <div class="seg" role="group" aria-label="Reporte"><button data-a="rep" data-v="bal" aria-pressed="${repTab==='bal'}">Balanza</button><button data-a="rep" data-v="res" aria-pressed="${repTab==='res'}">Resultados</button><button data-a="rep" data-v="bg" aria-pressed="${repTab==='bg'}">Balance general</button></div>`;
+ if(!S.entries.length){V().innerHTML=h+`<div class="card empty"><strong>No hay asientos todavía.</strong><span>Los reportes aparecen cuando registres transacciones.</span></div>`;return}
+ if(repTab!=='bal'&&C.periodic&&(C.invIni||C.compras))h+=`<div class="card"><label class="f" for="invFin">Inventario final de mercancías (conteo físico, RD$)<input type="text" inputmode="decimal" id="invFin" value="${S.invFinal==null?'':S.invFinal}" placeholder="${fm(C.invIni)}"></label>
+  <span style="font-size:.82rem;color:var(--muted)">Sistema periódico: Costo de ventas = Inventario inicial + Compras netas − Inventario final. Si lo dejas vacío se usa ${fm(C.invIni)}.</span></div>`;
+ h+=`<div class="card">${repTab==='bal'?balanza(C):repTab==='res'?estadoResultados(C):balanceGeneral(C)}</div>`;
+ const temp=ACC.some(a=>['I','CO','G'].includes(a.cls)&&C.has(a.code)&&!zero(dh(C.L,a.code)));
+ if(repTab!=='bal'&&temp)h+=`<div class="card"><h3>Asientos de cierre</h3><p style="margin:0;font-size:.88rem;color:var(--muted)">Al final del período se cierran ingresos, costos y gastos contra 7100 Resumen de Ganancias o Pérdidas, y el resultado pasa a 3202 Ganancias del Período.</p>
+  <div class="row">${closingAsk?`<span style="font-size:.88rem">Se agregarán los asientos de cierre al Diario. ¿Continuar?</span><button class="btn sm primary" data-a="close-yes">Sí, cerrar período</button><button class="btn sm ghost" data-a="close-no">Cancelar</button>`:`<button class="btn" data-a="close">Generar asientos de cierre</button>`}</div></div>`;
+ V().innerHTML=h;
+ const inp=document.getElementById('invFin');if(inp)inp.onchange=()=>{S.invFinal=inp.value.trim()===''?null:pnum(inp.value);save();render()};}
+
+function vCatalogo(){const q=catQ.trim().toLowerCase();
+ let h=`<h2 class="view-title">Catálogo de cuentas</h2><p class="lede">Basado en el catálogo de UTESA y ampliado. D = naturaleza deudora, C = acreedora. Las cuentas “Menos:” son reguladoras (contra-cuentas).</p>
+ <input type="search" id="catQ" placeholder="Buscar por código o nombre" value="${esc(catQ)}" aria-label="Buscar cuenta">`;
+ let body='',lastCls='';
+ for(const g in GROUPS){const list=ACC.filter(a=>a.g===g&&(!q||a.code.includes(q)||a.name.toLowerCase().includes(q)));if(!list.length)continue;
+  const cls=GROUPS[g][1];if(cls!==lastCls){body+=`<div class="cat-cls">${CLASSES[cls]}</div>`;lastCls=cls}
+  body+=`<div class="cat-grp">${GROUPS[g][0]}</div>`+list.map(a=>`<div class="cat-item"><span class="num">${a.code}</span><span>${a.contra?'<em style="color:var(--muted)">Menos: </em>':''}${esc(a.name)}${a.custom?' <span class="pill mute">propia</span>':''}</span><span class="nat ${a.nat}">${a.nat}</span></div>`).join('');}
+ h+=`<div class="card" id="catList">${body||'<div class="empty">Ninguna cuenta coincide.</div>'}</div>`;
+ h+=`<div class="card"><h3>Agregar cuenta propia</h3>
+  <div class="ed-meta"><label class="f" for="nCode">Código<input type="text" id="nCode" placeholder="1000-06"></label><label class="f" for="nName">Nombre<input type="text" id="nName" placeholder="Banco Santa Cruz"></label></div>
+  <label class="f" for="nGrp">Grupo<select id="nGrp">${Object.entries(GROUPS).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('')}</select></label>
+  <label class="row" style="font-size:.88rem" for="nContra"><input type="checkbox" id="nContra"> Es cuenta reguladora (naturaleza contraria a su grupo)</label>
+  <div class="msg" id="nMsg"></div><div class="row"><span class="spacer"></span><button class="btn primary" data-a="addacc">Agregar al catálogo</button></div></div>`;
+ h+=`<div class="card"><h3>Empresa y datos</h3>
+  <label class="f" for="empresa">Nombre de la empresa en los reportes<input type="text" id="empresa" value="${esc(S.empresa)}"></label>
+  <p style="margin:0;font-size:.85rem;color:var(--muted)">Tus asientos se guardan en este navegador. Copia el respaldo de vez en cuando y pégalo aquí para recuperarlos en otro teléfono.</p>
+  <textarea id="backup" rows="3" aria-label="Respaldo" placeholder="Pega aquí un respaldo para restaurarlo"></textarea>
+  <div class="msg" id="bMsg"></div>
+  <div class="row"><button class="btn sm" data-a="bk-copy">Copiar respaldo</button><button class="btn sm" data-a="bk-load">Restaurar respaldo pegado</button><span class="spacer"></span>
+  ${resetAsk==='seed'?`<button class="btn sm danger" data-a="seed-yes">Sí, restaurar</button><button class="btn sm ghost" data-a="seed-no">No</button>`:`<button class="btn sm ghost danger" data-a="seed">Restaurar datos de ejemplo</button>`}</div></div>`;
+ V().innerHTML=h;
+ const qi=document.getElementById('catQ');qi.oninput=()=>{catQ=qi.value;const pos=qi.selectionStart;vCatalogo();const n=document.getElementById('catQ');n.focus();n.setSelectionRange(pos,pos)};
+ const em=document.getElementById('empresa');em.onchange=()=>{S.empresa=em.value.trim()||'Mi Empresa, SRL';save();render()};}
+
+/* ========== EVENTOS ========== */
+document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;TAB=b.dataset.tab;confirmDel=null;resetAsk=null;closingAsk=false;render();window.scrollTo(0,0)});
+V().addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,id=b.dataset.id;
+ const M=(id,t,c)=>{const m=document.getElementById(id);m.className='msg '+(c||'bad');m.textContent=t};
+ switch(a){
+  case 'new':newOpen=true;editingId=null;render();break;
+  case 'edit':editingId=id;newOpen=false;render();break;
+  case 'del':confirmDel=id;render();break;
+  case 'del-no':confirmDel=null;render();break;
+  case 'del-yes':S.entries=S.entries.filter(x=>x.id!==id);confirmDel=null;save();render();break;
+  case 'blank':resetAsk='blank';render();break;
+  case 'blank-no':case 'seed-no':resetAsk=null;render();break;
+  case 'blank-yes':S.entries=[];S.invFinal=null;resetAsk=null;save();render();break;
+  case 'seed':resetAsk='seed';render();break;
+  case 'seed-yes':{const emp=S.empresa,cu=S.custom;S=seed();S.empresa=emp;S.custom=cu;resetAsk=null;save();buildAcc();render();break}
+  case 'ex':exSel=+b.dataset.i;exShow=false;render();window.scrollTo({top:0});break;
+  case 'ex-close':exSel=null;render();break;
+  case 'rep':repTab=b.dataset.v;closingAsk=false;render();break;
+  case 'close':closingAsk=true;render();break;
+  case 'close-no':closingAsk=false;render();break;
+  case 'close-yes':{const C=calc();S.entries.push(...closingEntries(C));S.invFinal=null;closingAsk=false;sortEntries();save();render();break}
+  case 'addacc':{const code=document.getElementById('nCode').value.trim(),name=document.getElementById('nName').value.trim(),g=document.getElementById('nGrp').value,ct=document.getElementById('nContra').checked;
+   if(!/^[0-9][0-9-]{2,}$/.test(code))return M('nMsg','Escribe un código numérico, por ejemplo 1000-06.');
+   if(AMAP[code])return M('nMsg',`El código ${code} ya existe: ${AMAP[code].name}.`);
+   if(!name)return M('nMsg','Escribe el nombre de la cuenta.');
+   S.custom.push([code,name,g,ct?1:0]);save();buildAcc();render();break}
+  case 'bk-copy':{const txt=JSON.stringify(S),ta=document.getElementById('backup');
+   const ok=()=>M('bMsg','Respaldo copiado. Guárdalo en tus notas o envíatelo por WhatsApp.','ok');
+   try{navigator.clipboard.writeText(txt).then(ok,()=>{ta.value=txt;ta.select();M('bMsg','No se pudo copiar automáticamente. El respaldo quedó seleccionado en el cuadro: cópialo a mano.')})}catch(err){ta.value=txt;ta.select();M('bMsg','El respaldo quedó en el cuadro: cópialo a mano.')}break}
+  case 'bk-load':{try{const o=JSON.parse(document.getElementById('backup').value);if(!Array.isArray(o.entries))throw 0;S=Object.assign(seed(),o);save();buildAcc();render();M('bMsg','Respaldo restaurado.','ok')}catch(err){M('bMsg','Ese texto no es un respaldo válido. Pega el texto completo que copiaste.')}break}
+ }});
+render();
+</script>
+
+</body>
+</html>
